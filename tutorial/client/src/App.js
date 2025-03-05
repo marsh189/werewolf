@@ -1,9 +1,11 @@
 import { useState } from 'react';
 import './App.css';
+import { StreamChat } from 'stream-chat';
+import { Chat } from 'stream-chat-react';
+import Cookies from 'universal-cookie';
 import Login from './components/Login';
 import SignUp from './components/SignUp';
-import { StreamChat } from 'stream-chat';
-import Cookies from 'universal-cookie';
+import JoinGame from './components/JoinGame';
 
 function App() {
   const cookies = new Cookies();
@@ -42,10 +44,9 @@ function App() {
   return (
     <div className="App">
       {isAuth ? (
-        <>
-          <h1>Game</h1>
-          <button onClick={logOut}>Logout</button>
-        </>
+        <Chat client={client}>
+          <JoinGame />
+        </Chat>
       ) : (
         <>
           <SignUp setIsAuth={setIsAuth} />
