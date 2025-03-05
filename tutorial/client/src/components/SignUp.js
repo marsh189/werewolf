@@ -1,9 +1,30 @@
 import { useState } from 'react';
+import Axios from 'axios';
+import Cookies from 'universal-cookie';
 
-function SignUp() {
+function SignUp({ setIsAuth }) {
+  const cookies = new Cookies();
   const [user, setUser] = useState(null);
 
-  const signUp = () => {};
+  const signUp = () => {
+    Axios.post(process.env.REACT_APP_API_URL + '/signup', user).then((res) => {
+      const error = res.data.message;
+      if (error) {
+        console.log('username already exists');
+        return;
+      }
+      const { token, userId, firstName, lastName, username, hashedPassword } =
+        res.data;
+
+      cookies.set('token', token);
+      cookies.set('userId', userId);
+      cookies.set('username', username);
+      cookies.set('firstName', firstName);
+      cookies.set('lastName', lastName);
+      cookies.set('hashedPassword', hashedPassword);
+      setIsAuth(true);
+    });
+  };
   return (
     <div className="signUp">
       <label>Sign Up</label>
@@ -22,13 +43,14 @@ function SignUp() {
       <input
         placeholder="Username"
         onChange={(event) => {
-          setUser({ ...user, userName: event.target.value });
+          setUser({ ...user, username: event.target.value });
         }}
       />
       <input
         placeholder="Password"
+        type="password"
         onChange={(event) => {
-          setUser({ ...user, passWord: event.target.value });
+          setUser({ ...user, password: event.target.value });
         }}
       />
 
