@@ -1,13 +1,7 @@
-import { io, Socket } from 'socket.io-client';
+'use client';
 
-let socket: Socket | null = null;
+import { io } from 'socket.io-client';
 
-export function getSocket() {
-  if (!socket) {
-    socket = io({
-      path: '/api/socket',
-    });
-  }
-
-  return socket;
-}
+export const socket = io('http://localhost:3000', {
+  autoConnect: false,
+});

@@ -1,4 +1,4 @@
-export type Role = 'villager' | 'werewolf';
+import { Role } from './roles';
 
 export type Player = {
   id: string;
