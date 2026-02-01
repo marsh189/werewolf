@@ -4,23 +4,13 @@ import Google from 'next-auth/providers/google';
 import Credentials from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import GitHub from 'next-auth/providers/github';
-
-// TEMP fake user store (replace with DB later)
-const users = [
-  {
-    id: '1',
-    email: 'test@example.com',
-    passwordHash: bcrypt.hashSync('password123', 10),
-    name: 'Test User',
-  },
-];
+import { tempUsers } from './lib/tempUsers';
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   session: {
     strategy: 'jwt',
   },
   providers: [
-    // ✅ Google OAuth
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
@@ -30,7 +20,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientSecret: process.env.GITHUB_CLIENT_SECRET!,
     }),
 
-    // ✅ Email / Password
     Credentials({
       name: 'Credentials',
       credentials: {
@@ -42,10 +31,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           return null;
         }
 
+        const emailString = credentials.email as string;
+
+        const email = emailString.toLowerCase().trim();
         const password = credentials.password as string;
 
-        const user = users.find((u) => u.email === credentials.email);
-        if (!user) return null;
+        const user = tempUsers.find((u) => u.email === credentials.email);
+        if (!user) throw new Error('INVALID LOGIN');
 
         const isValid = await bcrypt.compare(password, user.passwordHash);
         if (!isValid) return null;

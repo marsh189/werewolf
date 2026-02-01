@@ -1,14 +1,49 @@
 'use client';
 
 import Title from '@/components/Title';
+import { socket } from '@/lib/socket';
 import { signIn, signOut, useSession } from 'next-auth/react';
 import Link from 'next/link';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function HomePage() {
+  const router = useRouter();
   const { data: session } = useSession();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
+
+  useEffect(() => {
+    if (!session) return;
+
+    if (!socket.connected) socket.connect();
+
+    socket.on('connect', () => {
+      console.log('✅ socket connected:', socket.id);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('❌ connect_error:', err.message);
+    });
+
+    return () => {
+      socket.off('connect');
+      socket.off('connect_error');
+    };
+  }, [session]);
+
+  const credSignIn = async () => {
+    const res = await signIn('credentials', {
+      email,
+      password,
+      redirect: false,
+    });
+
+    if (res?.error) {
+      setErrorMessage('Incorret Password or User Not Found');
+    }
+  };
 
   return (
     <main>
@@ -82,22 +117,22 @@ export default function HomePage() {
                       className="game-input"
                       autoComplete="current-password"
                     />
+                    <p className="text-center text-red-300">{errorMessage}</p>
                   </div>
 
                   <div className="pt-2">
                     <button
                       type="button"
-                      onClick={() =>
-                        signIn('credentials', {
-                          email,
-                          password,
-                          redirect: false,
-                        })
-                      }
+                      onClick={credSignIn}
                       className="game-button-primary"
                     >
                       Sign In
                     </button>
+                  </div>
+                  <div className="space-y-3 text-center">
+                    <Link href="/signup" className="game-link">
+                      Create New Account
+                    </Link>
                   </div>
                 </div>
               </div>
