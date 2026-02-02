@@ -15,7 +15,9 @@ export function LobbyGuard({ children }: { children: React.ReactNode }) {
     if (!socket.connected) socket.connect();
 
     socket.emit('lobby:verify', { lobbyName }, (res: { ok: boolean }) => {
+      console.log(res);
       if (!res.ok) {
+        console.log('REDIRECTING');
         router.replace('/');
       }
     });

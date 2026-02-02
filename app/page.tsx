@@ -40,9 +40,30 @@ export default function HomePage() {
       redirect: false,
     });
 
-    if (res?.error) {
-      setErrorMessage('Incorret Password or User Not Found');
+    const code = res?.code ?? null;
+
+    console.log(code);
+
+    if (code === 'NO_USER') {
+      setErrorMessage('No account found. Please sign up.');
+      return;
     }
+    if (code === 'BAD_PASSWORD') {
+      setErrorMessage('Incorrect password.');
+      return;
+    }
+    if (code === 'MISSING_FIELDS') {
+      setErrorMessage('Please enter email and password.');
+      return;
+    }
+
+    if (res?.error) {
+      setErrorMessage('Sign in failed.');
+      return;
+    }
+
+    // success
+    router.refresh();
   };
 
   return (
@@ -95,6 +116,13 @@ export default function HomePage() {
                   <p className="text-center text-slate-300">
                     Sign in with email
                   </p>
+                  {errorMessage && (
+                    <div className="game-box border-red-500/30 bg-red-500/10">
+                      <span className="text-red-200 text-sm">
+                        {errorMessage}
+                      </span>
+                    </div>
+                  )}
 
                   <div className="space-y-3">
                     <label className="game-label">Email</label>
@@ -117,7 +145,6 @@ export default function HomePage() {
                       className="game-input"
                       autoComplete="current-password"
                     />
-                    <p className="text-center text-red-300">{errorMessage}</p>
                   </div>
 
                   <div className="pt-2">

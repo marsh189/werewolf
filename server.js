@@ -15,14 +15,32 @@ const userToLobby = new Map(); //This prevents a user being in two lobbies at on
 
 console.log('🔥 SERVER.JS FILE LOADED');
 
-const createLobby = (name, hostUser) => {
+const createLobby = (name, cap, hostUser) => {
   return {
     name,
     hostUserId: hostUser.id,
     createdAt: Date.now(),
     started: false,
+    cap: cap ?? 10,
     members: new Map(), // userId -> { userId, name, socketId, joinedAt }
   };
+};
+
+const publicLobbyView = ([lobbyName, lobby]) => {
+  return {
+    lobbyName,
+    hostUserId: lobby.hostUserId,
+    memberCount: lobby.members.size,
+    started: lobby.started,
+    cap: lobby.cap ?? null,
+  };
+};
+
+const getOpenLobbies = () => {
+  return [...lobbies.entries()]
+    .filter(([, l]) => !l.started) // only joinable
+    .map(publicLobbyView)
+    .sort((a, b) => b.memberCount - a.memberCount);
 };
 
 const createMember = (user, socketId) => {
@@ -33,8 +51,6 @@ const createMember = (user, socketId) => {
     joinedAt: Date.now(),
   };
 };
-
-const makeLobbyView = (lobby) => {};
 
 app.prepare().then(() => {
   const httpServer = createServer(handler);
@@ -96,7 +112,7 @@ app.prepare().then(() => {
       }
 
       lobby.members.set(user.id, createMember(user, socket.id));
-      userToLobby.set(name);
+      userToLobby.set(user.id, name);
 
       socket.join(name);
 
@@ -110,20 +126,14 @@ app.prepare().then(() => {
         })),
         hostUserId: lobby.hostUserId,
         started: lobby.started,
+        cap: lobby.cap,
       });
 
       return ack({ ok: true, lobbyName: name });
     });
 
-    socket.on('createLobby', (data, callback) => {
-      const { lobbyName } = data ?? {};
-
-      //field name is required, so we should never get to this point
-      if (!lobbyName || typeof lobbyName !== 'string') {
-        return callback({ ok: false, error: 'Invalid Lobby Name' });
-      }
-
-      const name = lobbyName.trim();
+    socket.on('createLobby', ({ lobbyName, cap }, callback) => {
+      const name = String(lobbyName ?? '').trim();
 
       if (!name) {
         return callback({ ok: false, error: 'Invalid Lobby Name' });
@@ -135,7 +145,7 @@ app.prepare().then(() => {
         return callback({ ok: false, error: 'Lobby Name Already Exists' });
       }
 
-      const lobby = createLobby(name, user);
+      const lobby = createLobby(name, cap, user);
       lobby.members.set(user.id, createMember(user, socket.id));
       lobbies.set(name, lobby);
       userToLobby.set(user.id, name);
@@ -152,7 +162,10 @@ app.prepare().then(() => {
         })),
         hostUserId: lobby.hostUserId,
         started: lobby.started,
+        cap: lobby.cap,
       });
+
+      io.emit('openLobbies', getOpenLobbies());
 
       return callback({ ok: true, lobbyName: name });
     });
@@ -181,6 +194,7 @@ app.prepare().then(() => {
           name: m.name,
         })),
         started: lobby.started,
+        cap: lobby.cap,
       };
 
       return ack({
@@ -194,45 +208,53 @@ app.prepare().then(() => {
       const { lobbyName } = data ?? {};
 
       if (!lobbyName || typeof lobbyName !== 'string') {
-        return callback({ ok: false, error: 'Invalid Lobby Name' });
+        return ack({ ok: false, error: 'Invalid Lobby Name' });
       }
 
       const name = lobbyName.trim();
 
       if (!name) {
-        return callback({ ok: false, error: 'Invalid Lobby Name' });
+        return ack({ ok: false, error: 'Invalid Lobby Name' });
       }
 
       const lobbyExists = io.sockets.adapter.rooms.has(name);
 
       if (!lobbyExists) {
-        return callback({ ok: false, error: 'Lobby Does Not Exist' });
+        return ack({ ok: false, error: 'Lobby Does Not Exist' });
       }
 
       const current = userToLobby.get(user.id);
-      if (current || current !== name) {
-        return cb({ ok: false, error: 'User has not joined this lobby' });
+      if (!current || current !== name) {
+        return ack({ ok: false, error: 'User has not joined this lobby' });
       }
 
-      return callback({
+      const lobby = lobbies.get(name);
+      if (!lobby) return ack({ ok: false, error: 'Lobby metadata missing' });
+
+      return ack({
         ok: true,
         lobbyInfo: {
-          lobbyName,
+          lobbyName: lobby.name,
           members: Array.from(lobby.members.values()).map((m) => ({
             userId: m.userId,
             name: m.name,
           })),
           hostUserId: lobby.hostUserId,
           started: lobby.started,
+          cap: lobby.cap,
         },
       });
+    });
+
+    socket.on('list-open-lobbies', (_, callback) => {
+      callback?.({ ok: true, lobbies: getOpenLobbies() });
     });
 
     socket.on('disconnect', () => {
       const lobbyName = userToLobby.get(user.id);
       if (!lobbyName) return;
 
-      const lobby = lobbies.get(name);
+      const lobby = lobbies.get(lobbyName);
       if (!lobby) return;
 
       lobby.members.delete(user.id);
@@ -240,13 +262,14 @@ app.prepare().then(() => {
 
       if (lobby.members.size === 0) {
         lobbies.delete(lobbyName);
-        return;
       }
 
       //new host if current host disconnects
-      if (lobby.hostUserId === user.id) {
-        lobby.hostUserId = lobby.members.values().next().value.id;
+      if (lobby.hostUserId === user.id && lobby.members.values().next()) {
+        lobby.hostUserId = lobby.members.values().next().value.userId;
       }
+
+      io.emit('openLobbies', getOpenLobbies());
 
       io.to(lobbyName).emit('update', {
         lobbyName,
@@ -256,6 +279,7 @@ app.prepare().then(() => {
         })),
         hostUserId: lobby.hostUserId,
         started: lobby.started,
+        cap: lobby.cap,
       });
     });
   });

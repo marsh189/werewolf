@@ -47,7 +47,7 @@ export default function CreateLobby() {
       .timeout(5000)
       .emit(
         'createLobby',
-        { lobbyName: lobbyNameValue.trim() },
+        { lobbyName: lobbyNameValue.trim(), cap: selectedCap },
         (
           err: any,
           response: { ok: boolean; lobbyName?: string; error?: string },
@@ -100,6 +100,11 @@ export default function CreateLobby() {
             <h1 className="game-title mb-10">Create Lobby</h1>
 
             <form onSubmit={createNewLobby} className="space-y-10">
+              {errorMessage && (
+                <div className="game-box border-red-500/30 bg-red-500/10">
+                  <span className="text-red-200 text-sm">{errorMessage}</span>
+                </div>
+              )}
               {/* Lobby Name */}
               <div className="space-y-3">
                 <label className="game-label">Lobby Name</label>
@@ -178,7 +183,6 @@ export default function CreateLobby() {
                   </div>
                 )}
               </div>
-              <p className="text-center text-red-300">{errorMessage}</p>
 
               {/* Create Button */}
               <div className="pt-4">
