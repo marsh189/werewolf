@@ -93,6 +93,7 @@ export default function Joinlobby() {
     if (!socket.connected) socket.connect();
 
     const onOpenLobbies = (list: OpenLobby[]) => {
+      console.log('SETTING OPEN LOBBIES');
       setOpenLobbies(list ?? []);
       setLoadingLobbies(false);
     };

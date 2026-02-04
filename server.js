@@ -111,23 +111,7 @@ app.prepare().then(() => {
         return ack({ ok: false, error: 'Already in another lobby' });
       }
 
-      lobby.members.set(user.id, createMember(user, socket.id));
-      userToLobby.set(user.id, name);
-
-      socket.join(name);
-
-      console.log(`🟢 ${socket.id} (${user?.email}) joined lobby ${name}`);
-
-      io.to(name).emit('update', {
-        lobbyName: name,
-        members: Array.from(lobby.members.values()).map((m) => ({
-          userId: m.userId,
-          name: m.name,
-        })),
-        hostUserId: lobby.hostUserId,
-        started: lobby.started,
-        cap: lobby.cap,
-      });
+      joinLobby(lobby, io, socket);
 
       return ack({ ok: true, lobbyName: name });
     });
@@ -146,26 +130,7 @@ app.prepare().then(() => {
       }
 
       const lobby = createLobby(name, cap, user);
-      lobby.members.set(user.id, createMember(user, socket.id));
-      lobbies.set(name, lobby);
-      userToLobby.set(user.id, name);
-
-      socket.join(name);
-
-      console.log(`🟢 ${socket.id} (${user?.email}) joined lobby ${name}`);
-
-      io.to(name).emit('update', {
-        lobbyName: name,
-        members: Array.from(lobby.members.values()).map((m) => ({
-          userId: m.userId,
-          name: m.name,
-        })),
-        hostUserId: lobby.hostUserId,
-        started: lobby.started,
-        cap: lobby.cap,
-      });
-
-      io.emit('openLobbies', getOpenLobbies());
+      joinLobby(lobby, io, socket);
 
       return callback({ ok: true, lobbyName: name });
     });
@@ -250,39 +215,85 @@ app.prepare().then(() => {
       callback?.({ ok: true, lobbies: getOpenLobbies() });
     });
 
+    socket.on('leaveLobby', (data) => {
+      const { lobbyName } = data ?? {};
+
+      if (!lobbyName || typeof lobbyName !== 'string') return;
+
+      leaveLobby(lobbyName, io, socket);
+    });
+
     socket.on('disconnect', () => {
       const lobbyName = userToLobby.get(user.id);
       if (!lobbyName) return;
 
-      const lobby = lobbies.get(lobbyName);
-      if (!lobby) return;
-
-      lobby.members.delete(user.id);
-      userToLobby.delete(user.id);
-
-      if (lobby.members.size === 0) {
-        lobbies.delete(lobbyName);
-      }
-
-      //new host if current host disconnects
-      if (lobby.hostUserId === user.id && lobby.members.values().next()) {
-        lobby.hostUserId = lobby.members.values().next().value.userId;
-      }
-
-      io.emit('openLobbies', getOpenLobbies());
-
-      io.to(lobbyName).emit('update', {
-        lobbyName,
-        members: Array.from(lobby.members.values()).map((m) => ({
-          userId: m.userId,
-          name: m.name,
-        })),
-        hostUserId: lobby.hostUserId,
-        started: lobby.started,
-        cap: lobby.cap,
-      });
+      leaveLobby(lobbyName, io, socket);
     });
   });
+
+  const leaveLobby = (lobbyName, io, socket) => {
+    const user = socket.data.user;
+    if (!lobbyName) return;
+
+    const lobby = lobbies.get(lobbyName);
+    if (!lobby) return;
+
+    socket.leave(lobby.name);
+    lobby.members.delete(user.id);
+    userToLobby.delete(user.id);
+
+    if (lobby.members.size === 0) {
+      lobbies.delete(lobbyName);
+    }
+
+    //new host if current host disconnects
+    console.log(lobby.members);
+    if (
+      lobby.hostUserId === user.id &&
+      lobby.members.size > 0 &&
+      lobby.members.values().next()
+    ) {
+      lobby.hostUserId = lobby.members.values().next().value.userId;
+    }
+    console.log(`🟢 ${socket.id} (${user?.email}) left lobby ${lobby.name}`);
+
+    io.emit('openLobbies', getOpenLobbies());
+
+    io.to(lobbyName).emit('update', {
+      lobbyName,
+      members: Array.from(lobby.members.values()).map((m) => ({
+        userId: m.userId,
+        name: m.name,
+      })),
+      hostUserId: lobby.hostUserId,
+      started: lobby.started,
+      cap: lobby.cap,
+    });
+  };
+
+  const joinLobby = (lobby, io, socket) => {
+    const user = socket.data.user;
+    lobby.members.set(user.id, createMember(user, socket.id));
+    lobbies.set(lobby.name, lobby);
+    userToLobby.set(user.id, lobby.name);
+
+    socket.join(lobby.name);
+
+    console.log(`🟢 ${socket.id} (${user?.email}) joined lobby ${lobby.name}`);
+
+    io.to(lobby.name).emit('update', {
+      lobbyName: lobby.name,
+      members: Array.from(lobby.members.values()).map((m) => ({
+        userId: m.userId,
+        name: m.name,
+      })),
+      hostUserId: lobby.hostUserId,
+      started: lobby.started,
+      cap: lobby.cap,
+    });
+
+    io.emit('openLobbies', getOpenLobbies());
+  };
 
   httpServer
     .once('error', (err) => {

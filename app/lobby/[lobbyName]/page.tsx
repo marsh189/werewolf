@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Title from '@/components/Title';
+import { useSession } from 'next-auth/react';
 
 export type LobbyView = {
   lobbyName: string;
@@ -16,6 +17,7 @@ export type LobbyView = {
 
 export default function Lobby() {
   const router = useRouter();
+  const { data: session, status: sessionStatus } = useSession();
   const { lobbyName } = useParams<{ lobbyName: string }>();
 
   const [lobbyInfo, setLobbyInfo] = useState<LobbyView | null>(null);
@@ -40,7 +42,12 @@ export default function Lobby() {
     };
   }, [lobbyName]);
 
-  const isHost = lobbyInfo?.hostUserId && lobbyInfo.hostUserId === socket.id; // optional, if hostUserId maps differently remove
+  const isHost =
+    lobbyInfo?.hostUserId && session?.user?.id
+      ? lobbyInfo.hostUserId === session.user.id
+      : false;
+
+  console.log(session?.user.id);
 
   return (
     <LobbyGuard>
@@ -115,24 +122,32 @@ export default function Lobby() {
             </div>
 
             {/* Actions (placeholders; wire up later) */}
+
             <div className="mt-10 space-y-3">
-              <button
-                type="button"
-                className="game-button-primary disabled:opacity-60 disabled:cursor-not-allowed"
-                disabled={!lobbyInfo || lobbyInfo.started}
-                onClick={() => {
-                  // hook up later: socket.emit('startGame', { lobbyName })
-                  console.log('Start game (todo)');
-                }}
-              >
-                {lobbyInfo?.started ? 'Game Started' : 'Start Game'}
-              </button>
+              {sessionStatus === 'loading' && (
+                <div className="text-xs text-slate-400">
+                  Checking sessionâ€¦
+                </div>
+              )}
+              {isHost && (
+                <button
+                  type="button"
+                  className="game-button-primary disabled:opacity-60 disabled:cursor-not-allowed"
+                  disabled={!lobbyInfo || lobbyInfo.started}
+                  onClick={() => {
+                    // hook up later: socket.emit('startGame', { lobbyName })
+                    console.log('Start game (todo)');
+                  }}
+                >
+                  {lobbyInfo?.started ? 'Game Started' : 'Start Game'}
+                </button>
+              )}
 
               <button
                 type="button"
                 className="w-full py-4 rounded-xl font-bold text-white bg-slate-800/70 border border-slate-700 hover:bg-slate-800 transition shadow-xl"
                 onClick={() => {
-                  //socket.emit('leaveLobby', { lobbyName });
+                  socket.emit('leaveLobby', { lobbyName });
                   router.push('/');
                 }}
               >
