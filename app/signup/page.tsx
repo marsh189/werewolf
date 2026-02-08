@@ -1,6 +1,6 @@
 'use client';
 
-import Title from '@/components/Title';
+import Navbar from '@/components/Navbar';
 import Link from 'next/link';
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';
@@ -67,7 +67,7 @@ export default function SignUp() {
 
   return (
     <main>
-      <Title />
+      <Navbar />
 
       <div className="min-h-screen flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-lg game-card">

@@ -15,14 +15,42 @@ const userToLobby = new Map(); //This prevents a user being in two lobbies at on
 
 console.log('🔥 SERVER.JS FILE LOADED');
 
-const createLobby = (name, cap, hostUser) => {
+const createLobby = (name, hostUser) => {
   return {
     name,
     hostUserId: hostUser.id,
     createdAt: Date.now(),
     started: false,
-    cap: cap ?? 10,
+    startingAt: null,
+    startTimeoutId: null,
+    werewolfCount: 1,
+    extraRoles: [],
+    phaseDurations: {
+      daySeconds: 60,
+      nightSeconds: 60,
+      voteSeconds: 30,
+    },
     members: new Map(), // userId -> { userId, name, socketId, joinedAt }
+  };
+};
+
+const buildLobbyInfo = (lobby) => {
+  return {
+    lobbyName: lobby.name,
+    hostUserId: lobby.hostUserId,
+    members: Array.from(lobby.members.values()).map((m) => ({
+      userId: m.userId,
+      name: m.name,
+    })),
+    started: lobby.started,
+    startingAt: lobby.startingAt,
+    werewolfCount: lobby.werewolfCount ?? 1,
+    extraRoles: Array.isArray(lobby.extraRoles) ? lobby.extraRoles : [],
+    phaseDurations: lobby.phaseDurations ?? {
+      daySeconds: 60,
+      nightSeconds: 60,
+      voteSeconds: 30,
+    },
   };
 };
 
@@ -32,13 +60,11 @@ const publicLobbyView = ([lobbyName, lobby]) => {
     hostUserId: lobby.hostUserId,
     memberCount: lobby.members.size,
     started: lobby.started,
-    cap: lobby.cap ?? null,
   };
 };
 
-const getOpenLobbies = () => {
+const getLobbies = () => {
   return [...lobbies.entries()]
-    .filter(([, l]) => !l.started) // only joinable
     .map(publicLobbyView)
     .sort((a, b) => b.memberCount - a.memberCount);
 };
@@ -116,7 +142,7 @@ app.prepare().then(() => {
       return ack({ ok: true, lobbyName: name });
     });
 
-    socket.on('createLobby', ({ lobbyName, cap }, callback) => {
+    socket.on('createLobby', ({ lobbyName }, callback) => {
       const name = String(lobbyName ?? '').trim();
 
       if (!name) {
@@ -129,7 +155,7 @@ app.prepare().then(() => {
         return callback({ ok: false, error: 'Lobby Name Already Exists' });
       }
 
-      const lobby = createLobby(name, cap, user);
+      const lobby = createLobby(name, user);
       joinLobby(lobby, io, socket);
 
       return callback({ ok: true, lobbyName: name });
@@ -151,20 +177,9 @@ app.prepare().then(() => {
         return ack({ ok: false, error: 'Invalid lobby name' });
       }
 
-      const lobbyInfo = {
-        lobbyName: lobby.name,
-        hostUserId: lobby.hostUserId,
-        members: Array.from(lobby.members.values()).map((m) => ({
-          userId: m.userId,
-          name: m.name,
-        })),
-        started: lobby.started,
-        cap: lobby.cap,
-      };
-
       return ack({
         ok: true,
-        lobbyInfo,
+        lobbyInfo: buildLobbyInfo(lobby),
       });
     });
 
@@ -198,21 +213,12 @@ app.prepare().then(() => {
 
       return ack({
         ok: true,
-        lobbyInfo: {
-          lobbyName: lobby.name,
-          members: Array.from(lobby.members.values()).map((m) => ({
-            userId: m.userId,
-            name: m.name,
-          })),
-          hostUserId: lobby.hostUserId,
-          started: lobby.started,
-          cap: lobby.cap,
-        },
+        lobbyInfo: buildLobbyInfo(lobby),
       });
     });
 
-    socket.on('list-open-lobbies', (_, callback) => {
-      callback?.({ ok: true, lobbies: getOpenLobbies() });
+    socket.on('lobbiesList', (_, callback) => {
+      callback?.({ ok: true, lobbies: getLobbies() });
     });
 
     socket.on('leaveLobby', (data) => {
@@ -221,6 +227,89 @@ app.prepare().then(() => {
       if (!lobbyName || typeof lobbyName !== 'string') return;
 
       leaveLobby(lobbyName, io, socket);
+    });
+
+    socket.on('startGame', (data, callback) => {
+      const ack = typeof callback === 'function' ? callback : () => {};
+      const { lobbyName } = data ?? {};
+
+      if (!lobbyName || typeof lobbyName !== 'string') {
+        return ack({ ok: false, error: 'Invalid Lobby Name' });
+      }
+
+      const name = lobbyName.trim();
+      const lobby = lobbies.get(name);
+      if (!lobby) return ack({ ok: false, error: 'Lobby does not exist' });
+
+      if (lobby.hostUserId !== user.id) {
+        return ack({ ok: false, error: 'Only host can start the game' });
+      }
+
+      if (lobby.started) {
+        return ack({ ok: false, error: 'Game already started' });
+      }
+
+      const startingAt = Date.now() + 5000;
+      lobby.startingAt = startingAt;
+
+      if (lobby.startTimeoutId) {
+        clearTimeout(lobby.startTimeoutId);
+      }
+
+      lobby.startTimeoutId = setTimeout(() => {
+        lobby.started = true;
+        lobby.startingAt = null;
+        io.to(lobby.name).emit('update', buildLobbyInfo(lobby));
+      }, 5000);
+
+      io.to(lobby.name).emit('update', buildLobbyInfo(lobby));
+      return ack({ ok: true, startingAt });
+    });
+
+    socket.on('lobby:updateSettings', (data, callback) => {
+      const ack = typeof callback === 'function' ? callback : () => {};
+      const { lobbyName, werewolfCount, extraRoles, phaseDurations } =
+        data ?? {};
+
+      if (!lobbyName || typeof lobbyName !== 'string') {
+        return ack({ ok: false, error: 'Invalid Lobby Name' });
+      }
+
+      const name = lobbyName.trim();
+      const lobby = lobbies.get(name);
+      if (!lobby) return ack({ ok: false, error: 'Lobby does not exist' });
+
+      if (lobby.hostUserId !== user.id) {
+        return ack({ ok: false, error: 'Only host can update settings' });
+      }
+
+      const count = Math.max(1, Number(werewolfCount) || 1);
+      const roles = Array.isArray(extraRoles)
+        ? extraRoles.filter((r) => typeof r === 'string')
+        : [];
+      const uniqueRoles = Array.from(new Set(roles));
+
+      lobby.werewolfCount = count;
+      lobby.extraRoles = uniqueRoles;
+      if (phaseDurations && typeof phaseDurations === 'object') {
+        const daySeconds = Math.max(
+          60,
+          Number(phaseDurations.daySeconds) || 60,
+        );
+        const nightSeconds = Math.max(
+          60,
+          Number(phaseDurations.nightSeconds) || 60,
+        );
+        const voteSeconds = Math.max(
+          1,
+          Number(phaseDurations.voteSeconds) || 30,
+        );
+        lobby.phaseDurations = { daySeconds, nightSeconds, voteSeconds };
+      }
+
+      io.to(lobby.name).emit('update', buildLobbyInfo(lobby));
+
+      return ack({ ok: true });
     });
 
     socket.on('disconnect', () => {
@@ -247,7 +336,6 @@ app.prepare().then(() => {
     }
 
     //new host if current host disconnects
-    console.log(lobby.members);
     if (
       lobby.hostUserId === user.id &&
       lobby.members.size > 0 &&
@@ -257,17 +345,10 @@ app.prepare().then(() => {
     }
     console.log(`🟢 ${socket.id} (${user?.email}) left lobby ${lobby.name}`);
 
-    io.emit('openLobbies', getOpenLobbies());
+    io.emit('lobbiesList', getLobbies());
 
     io.to(lobbyName).emit('update', {
-      lobbyName,
-      members: Array.from(lobby.members.values()).map((m) => ({
-        userId: m.userId,
-        name: m.name,
-      })),
-      hostUserId: lobby.hostUserId,
-      started: lobby.started,
-      cap: lobby.cap,
+      ...buildLobbyInfo(lobby),
     });
   };
 
@@ -282,17 +363,10 @@ app.prepare().then(() => {
     console.log(`🟢 ${socket.id} (${user?.email}) joined lobby ${lobby.name}`);
 
     io.to(lobby.name).emit('update', {
-      lobbyName: lobby.name,
-      members: Array.from(lobby.members.values()).map((m) => ({
-        userId: m.userId,
-        name: m.name,
-      })),
-      hostUserId: lobby.hostUserId,
-      started: lobby.started,
-      cap: lobby.cap,
+      ...buildLobbyInfo(lobby),
     });
 
-    io.emit('openLobbies', getOpenLobbies());
+    io.emit('lobbiesList', getLobbies());
   };
 
   httpServer

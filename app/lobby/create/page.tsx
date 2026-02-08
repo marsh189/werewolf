@@ -10,7 +10,7 @@ import {
   useState,
 } from 'react';
 import { ROLES } from '@/models/roles';
-import Title from '@/components/Title';
+import Navbar from '@/components/Navbar';
 import { useRouter } from 'next/navigation';
 
 export default function CreateLobby() {
@@ -93,7 +93,7 @@ export default function CreateLobby() {
 
   return (
     <>
-      <Title />
+      <Navbar />
       <div className="min-h-screen flex items-center justify-center px-6 py-12">
         <div className="game-card">
           <div className="game-card-glow">

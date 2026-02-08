@@ -1,24 +1,11 @@
 'use client';
 
-import Title from '@/components/Title';
+import Navbar from '@/components/Navbar';
 import { useEffect, useMemo, useState } from 'react';
 import { socket } from '@/lib/socket';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-
-type OpenLobby = {
-  lobbyName: string;
-  hostUserId: string;
-  memberCount: number;
-  started: boolean;
-  cap: number | null;
-};
-
-type ListAck =
-  | { ok: true; lobbies: OpenLobby[] }
-  | { ok: false; error?: string };
-
-type JoinAck = { ok: true; lobbyName: string } | { ok: false; error?: string };
+import type { OpenLobby, ListAck, JoinAck } from '@/models/lobby';
 
 export default function Joinlobby() {
   const router = useRouter();
@@ -44,7 +31,7 @@ export default function Joinlobby() {
 
     socket
       .timeout(5000)
-      .emit('list-open-lobbies', {}, (err: any, res: ListAck) => {
+      .emit('list-open-lobbies', {}, (err: any, res: ListAck<OpenLobby>) => {
         setRefreshing(false);
         setLoadingLobbies(false);
 
@@ -93,7 +80,6 @@ export default function Joinlobby() {
     if (!socket.connected) socket.connect();
 
     const onOpenLobbies = (list: OpenLobby[]) => {
-      console.log('SETTING OPEN LOBBIES');
       setOpenLobbies(list ?? []);
       setLoadingLobbies(false);
     };
@@ -111,7 +97,7 @@ export default function Joinlobby() {
 
   return (
     <>
-      <Title />
+      <Navbar />
 
       <div className="min-h-screen flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-2xl game-card">
