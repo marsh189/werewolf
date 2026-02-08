@@ -16,7 +16,7 @@ export default function SignUp() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const onSubmit = async (e: React.FormEvent) => {
+  const onSubmit = async (e: React.SubmitEvent) => {
     e.preventDefault();
     setErrorMessage(null);
 
@@ -57,7 +57,7 @@ export default function SignUp() {
       }
 
       setIsSubmitting(false);
-      router.push('/'); // or /lobby/create
+      router.push('/');
       router.refresh();
     } catch {
       setErrorMessage('Network error. Please try again.');

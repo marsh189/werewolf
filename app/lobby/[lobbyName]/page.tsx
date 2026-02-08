@@ -20,7 +20,6 @@ export default function Lobby() {
 
   useEffect(() => {
     if (!lobbyName) return;
-    if (!socket.connected) socket.connect();
 
     socket.emit('initiateLobby', { lobbyName }, (response: any) => {
       if (!response.ok) {
@@ -38,6 +37,14 @@ export default function Lobby() {
       socket.off('update', onUpdate);
     };
   }, [lobbyName]);
+
+  useEffect(() => {
+    if (!lobbyInfo?.started) return;
+    const name =
+      typeof lobbyName === 'string' ? lobbyName : lobbyInfo.lobbyName;
+    if (!name) return;
+    router.push(`/lobby/${encodeURIComponent(name)}/game`);
+  }, [lobbyInfo?.started, lobbyInfo?.lobbyName, lobbyName, router]);
 
   useEffect(() => {
     if (!lobbyInfo?.startingAt) return;
@@ -149,7 +156,7 @@ export default function Lobby() {
               {/* Members */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-sm uppercase tracking-widest text-slate-400">
+                  <h2 className="game-section-title">
                     Players
                   </h2>
                 </div>
@@ -200,7 +207,7 @@ export default function Lobby() {
             <div className="hidden lg:block w-px bg-gradient-to-b from-transparent via-sky-400/60 to-transparent" />
             <div className="w-full lg:w-2/3 lg:pl-8 flex flex-col">
               <div className="flex items-center justify-between">
-                <h2 className="text-sm uppercase tracking-widest text-slate-400">
+                <h2 className="game-section-title">
                   Settings
                 </h2>
               </div>

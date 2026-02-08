@@ -33,11 +33,11 @@ export default function LobbyCard({
       <td className="pl-3 py-3 text-[15px] font-medium text-left">
         {lobbyName}
       </td>
-      <td className="pr-3 py-3 text-[15px] text-slate-300 text-right">
+      <td className="pr-12 py-3 text-[15px] text-slate-300 text-right">
         {memberCount}
       </td>
       <td
-        className={`pr-3 py-3 text-[15px] text-right font-semibold ${
+        className={`pr-6 py-3 text-[15px] text-right font-semibold ${
           status ? 'text-red-400' : 'text-emerald-300'
         }`}
       >

@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { socket } from '@/lib/socket';
 
-export default function LobbyLayout({
+export default function GameLayout({
   children,
 }: {
   children: React.ReactNode;

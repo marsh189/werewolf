@@ -260,9 +260,11 @@ app.prepare().then(() => {
         lobby.started = true;
         lobby.startingAt = null;
         io.to(lobby.name).emit('update', buildLobbyInfo(lobby));
+        io.emit('lobbiesList', getLobbies());
       }, 5000);
 
       io.to(lobby.name).emit('update', buildLobbyInfo(lobby));
+      io.emit('lobbiesList', getLobbies());
       return ack({ ok: true, startingAt });
     });
 

@@ -33,7 +33,12 @@ export default function LobbySelect() {
     return lobbies.filter((l) => l.lobbyName.toLowerCase().includes(q));
   }, [lobbies, search]);
 
-  const displayedLobbies = openOnly ? filteredLobbies : lobbies;
+  const openFilteredLobbies = useMemo(
+    () => filteredLobbies.filter((lobby) => !lobby.started),
+    [filteredLobbies],
+  );
+
+  const displayedLobbies = openOnly ? openFilteredLobbies : filteredLobbies;
 
   const requestLobbiesList = () => {
     setErrorMessage('');
@@ -42,21 +47,21 @@ export default function LobbySelect() {
     socket
       .timeout(5000)
       .emit('lobbiesList', {}, (err: any, res: ListAck<LobbyListItem>) => {
-      setRefreshing(false);
-      setLoadingLobbies(false);
+        setRefreshing(false);
+        setLoadingLobbies(false);
 
-      if (err) {
-        setErrorMessage('Server did not respond. Try refresh again.');
-        return;
-      }
+        if (err) {
+          setErrorMessage('Server did not respond. Try refresh again.');
+          return;
+        }
 
-      if (!res?.ok) {
-        setErrorMessage(res?.error ?? 'Failed to fetch lobbies.');
-        return;
-      }
+        if (!res?.ok) {
+          setErrorMessage(res?.error ?? 'Failed to fetch lobbies.');
+          return;
+        }
 
-      setLobbies(res.lobbies ?? []);
-    });
+        setLobbies(res.lobbies ?? []);
+      });
   };
 
   const joinByName = (name: string) => {
@@ -156,6 +161,7 @@ export default function LobbySelect() {
                 type="button"
                 aria-label="Refresh"
                 className="game-button-primary py-1.5 md:w-auto md:px-2"
+                onClick={requestLobbiesList}
               >
                 <RefreshIcon />
               </button>
@@ -189,7 +195,7 @@ export default function LobbySelect() {
               />
               <label
                 htmlFor="open-lobbies"
-                className="uppercase tracking-[0.2em] text-[11px]"
+                className="game-tight-label"
               >
                 Show Open Lobbies
               </label>
@@ -204,17 +210,22 @@ export default function LobbySelect() {
 
           <div className="h-px w-full bg-gradient-to-r from-transparent via-sky-400/60 to-transparent" />
           <div className="flex justify-center">
-            <div className="w-full overflow-hidden">
-              <table className="w-full text-center text-sm">
-                <thead className="text-slate-300">
+            <div className="w-full overflow-hidden max-h-[520px] overflow-y-scroll lobby-scroll">
+              <table className="w-full text-center text-sm table-fixed">
+                <colgroup>
+                  <col className="w-2/3" />
+                  <col className="w-1/3" />
+                  <col className="w-1/3" />
+                </colgroup>
+                <thead className="sticky top-0 z-10 text-slate-300 border-b border-slate-700/60 bg-slate-950/80 backdrop-blur">
                   <tr>
-                    <th className="text-left py-3 text-[11px] font-semibold uppercase tracking-[0.2em]">
+                    <th className="pl-3 py-3 text-left game-table-head">
                       Lobby Name
                     </th>
-                    <th className="text-right py-3 text-[11px] font-semibold uppercase tracking-[0.2em]">
+                    <th className="pr-12 py-3 text-right game-table-head">
                       Players
                     </th>
-                    <th className="text-right py-3 text-[11px] font-semibold uppercase tracking-[0.2em]">
+                    <th className="pr-6 py-3 text-right game-table-head">
                       Status
                     </th>
                   </tr>
@@ -250,7 +261,7 @@ export default function LobbySelect() {
             <div className="flex items-center justify-between">
               <h2
                 id="create-lobby-title"
-                className="text-sm font-semibold uppercase tracking-[0.2em] text-slate-300"
+                className="game-table-head"
               >
                 Create Lobby
               </h2>

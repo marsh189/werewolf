@@ -44,7 +44,7 @@ export default function LobbySettings({
         <label className="game-label">Timers</label>
         <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <label className="text-sm uppercase tracking-widest text-slate-300">
+            <label className="game-section-title">
               Day
             </label>
             <div className="flex items-center justify-between gap-4">
@@ -94,7 +94,7 @@ export default function LobbySettings({
           </div>
 
           <div className="flex items-center justify-between">
-            <label className="text-sm uppercase tracking-widest text-slate-300">
+            <label className="game-section-title">
               Night
             </label>
             <div className="flex items-center justify-between gap-4">
@@ -144,7 +144,7 @@ export default function LobbySettings({
           </div>
 
           <div className="flex items-center justify-between">
-            <label className="text-sm uppercase tracking-widest text-slate-300">
+            <label className="game-section-title">
               Voting
             </label>
             <div className="flex items-center justify-between gap-4">

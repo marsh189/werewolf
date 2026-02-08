@@ -75,7 +75,7 @@ export default function Login() {
             {/* Divider */}
             <div className="flex items-center gap-4">
               <div className="h-px flex-1 bg-slate-700/70" />
-              <span className="text-xs uppercase tracking-widest text-slate-400">
+              <span className="game-section-title">
                 or
               </span>
               <div className="h-px flex-1 bg-slate-700/70" />
