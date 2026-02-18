@@ -24,7 +24,7 @@ export default function RoleRevealScene({
   endGameButton,
 }: RoleRevealSceneProps) {
   return (
-    <div className="reveal-scene min-h-screen flex items-center justify-center px-6 py-12">
+    <div className="game-cinematic-scene min-h-screen flex items-center justify-center px-6 py-12">
       <div className="w-full max-w-3xl text-center">
         {revealState !== 'hidden' ? (
           <div

@@ -1,10 +1,13 @@
 export const DEFAULT_PHASE_DURATIONS = {
-  daySeconds: 60,
-  nightSeconds: 60,
-  voteSeconds: 30,
+  daySeconds: 10,
+  nightSeconds: 10,
+  voteSeconds: 10,
 };
 
 export const START_COUNTDOWN_MS = 5000;
+export const DAY_ZERO_DURATION_MS = 10000;
+export const ELIMINATION_RESULTS_DURATION_MS = 5000;
+export const NIGHT_DEATH_REVEAL_DURATION_MS = 12000;
 
 const ROLE_TITLE_LEAD_MS = 1000;
 const ROLE_REVEAL_HOLD_MS = 3000;

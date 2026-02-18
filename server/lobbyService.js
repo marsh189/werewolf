@@ -1,5 +1,8 @@
 import {
+  DAY_ZERO_DURATION_MS,
   DEFAULT_PHASE_DURATIONS,
+  ELIMINATION_RESULTS_DURATION_MS,
+  NIGHT_DEATH_REVEAL_DURATION_MS,
   ROLE_REVEAL_TOTAL_MS,
   START_COUNTDOWN_MS,
 } from './constants.js';
@@ -17,9 +20,19 @@ export const createLobby = (name, hostUser) => {
     extraRoles: [],
     phaseDurations: { ...DEFAULT_PHASE_DURATIONS },
     gamePhase: 'lobby',
+    dayNumber: null,
+    nightNumber: null,
     phaseEndsAt: null,
+    currentNightDeathReveal: null,
     playerRoles: new Map(),
+    playerNotebooks: new Map(),
+    eliminatedUserIds: new Set(),
+    pendingNightDeathReveals: [],
+    pendingNightKillTargetId: null,
+    currentVotes: new Map(),
+    currentEliminationResult: null,
     revealTimeoutId: null,
+    phaseTimeoutId: null,
     members: new Map(),
   };
 };
@@ -31,6 +44,7 @@ export const buildLobbyInfo = (lobby) => {
     members: Array.from(lobby.members.values()).map((m) => ({
       userId: m.userId,
       name: m.name,
+      alive: !lobby.eliminatedUserIds?.has(m.userId),
     })),
     started: lobby.started,
     startingAt: lobby.startingAt,
@@ -38,7 +52,11 @@ export const buildLobbyInfo = (lobby) => {
     extraRoles: Array.isArray(lobby.extraRoles) ? lobby.extraRoles : [],
     phaseDurations: lobby.phaseDurations ?? { ...DEFAULT_PHASE_DURATIONS },
     gamePhase: lobby.gamePhase ?? 'lobby',
+    dayNumber: lobby.dayNumber ?? null,
+    nightNumber: lobby.nightNumber ?? null,
     phaseEndsAt: lobby.phaseEndsAt ?? null,
+    currentNightDeathReveal: lobby.currentNightDeathReveal ?? null,
+    currentEliminationResult: lobby.currentEliminationResult ?? null,
   };
 };
 
@@ -84,6 +102,10 @@ export const clearLobbyTimeouts = (lobby) => {
   if (lobby.revealTimeoutId) {
     clearTimeout(lobby.revealTimeoutId);
     lobby.revealTimeoutId = null;
+  }
+  if (lobby.phaseTimeoutId) {
+    clearTimeout(lobby.phaseTimeoutId);
+    lobby.phaseTimeoutId = null;
   }
 };
 
@@ -149,9 +171,166 @@ export const assignRolesToLobby = (lobby) => {
   lobby.playerRoles = nextRoles;
 };
 
+const schedulePhaseTransition = (io, lobby, durationMs, onComplete) => {
+  if (lobby.phaseTimeoutId) clearTimeout(lobby.phaseTimeoutId);
+  lobby.phaseEndsAt = Date.now() + durationMs;
+  lobby.phaseTimeoutId = setTimeout(() => {
+    lobby.phaseTimeoutId = null;
+    onComplete();
+  }, durationMs);
+};
+
+const startNightPhase = (io, lobby, nightNumber) => {
+  lobby.gamePhase = 'night';
+  lobby.nightNumber = nightNumber;
+  lobby.currentNightDeathReveal = null;
+  lobby.pendingNightDeathReveals = [];
+  lobby.pendingNightKillTargetId = null;
+  lobby.currentVotes = new Map();
+  lobby.currentEliminationResult = null;
+  schedulePhaseTransition(
+    io,
+    lobby,
+    (lobby.phaseDurations?.nightSeconds ?? 10) * 1000,
+    () => {
+      const targetId = lobby.pendingNightKillTargetId;
+      if (targetId && lobby.members.has(targetId) && !lobby.eliminatedUserIds.has(targetId)) {
+        lobby.eliminatedUserIds.add(targetId);
+        const member = lobby.members.get(targetId);
+        lobby.pendingNightDeathReveals.push({
+          userId: targetId,
+          name: member?.name ?? 'Unknown Player',
+          notebook: lobby.playerNotebooks?.get(targetId) ?? '',
+        });
+      }
+      lobby.pendingNightKillTargetId = null;
+      startNightResultsPhase(io, lobby);
+    },
+  );
+  emitLobbyUpdate(io, lobby);
+};
+
+const startNightResultsPhase = (io, lobby) => {
+  const reveals = Array.isArray(lobby.pendingNightDeathReveals)
+    ? lobby.pendingNightDeathReveals
+    : [];
+
+  if (!reveals.length) {
+    lobby.gamePhase = 'nightResults';
+    lobby.currentNightDeathReveal = null;
+    schedulePhaseTransition(io, lobby, NIGHT_DEATH_REVEAL_DURATION_MS, () => {
+      startDayPhase(io, lobby, (lobby.dayNumber ?? 0) + 1);
+    });
+    emitLobbyUpdate(io, lobby);
+    return;
+  }
+
+  let index = 0;
+  const showNextReveal = () => {
+    lobby.gamePhase = 'nightResults';
+    lobby.currentNightDeathReveal = reveals[index] ?? null;
+    schedulePhaseTransition(io, lobby, NIGHT_DEATH_REVEAL_DURATION_MS, () => {
+      index += 1;
+      if (index < reveals.length) {
+        showNextReveal();
+        return;
+      }
+      lobby.pendingNightDeathReveals = [];
+      lobby.currentNightDeathReveal = null;
+      startDayPhase(io, lobby, (lobby.dayNumber ?? 0) + 1);
+    });
+    emitLobbyUpdate(io, lobby);
+  };
+
+  showNextReveal();
+};
+
+const startEliminationResultsPhase = (io, lobby) => {
+  lobby.gamePhase = 'eliminationResults';
+  lobby.currentNightDeathReveal = null;
+  schedulePhaseTransition(io, lobby, ELIMINATION_RESULTS_DURATION_MS, () => {
+    lobby.currentEliminationResult = null;
+    startNightPhase(io, lobby, (lobby.nightNumber ?? 0) + 1);
+  });
+  emitLobbyUpdate(io, lobby);
+};
+
+const startVotePhase = (io, lobby) => {
+  lobby.gamePhase = 'vote';
+  lobby.currentVotes = new Map();
+  schedulePhaseTransition(
+    io,
+    lobby,
+    (lobby.phaseDurations?.voteSeconds ?? 10) * 1000,
+    () => {
+      const tally = new Map();
+      for (const targetId of lobby.currentVotes.values()) {
+        tally.set(targetId, (tally.get(targetId) ?? 0) + 1);
+      }
+      let topTargetId = null;
+      let topVotes = 0;
+      let tie = false;
+      for (const [targetId, count] of tally.entries()) {
+        if (count > topVotes) {
+          topVotes = count;
+          topTargetId = targetId;
+          tie = false;
+        } else if (count === topVotes) {
+          tie = true;
+        }
+      }
+
+      if (!tie && topTargetId && lobby.members.has(topTargetId) && !lobby.eliminatedUserIds.has(topTargetId)) {
+        lobby.eliminatedUserIds.add(topTargetId);
+        const member = lobby.members.get(topTargetId);
+        lobby.currentEliminationResult = {
+          userId: topTargetId,
+          name: member?.name ?? 'Unknown Player',
+          notebook: lobby.playerNotebooks?.get(topTargetId) ?? '',
+          voteCount: topVotes,
+          noElimination: false,
+        };
+      } else {
+        lobby.currentEliminationResult = {
+          noElimination: true,
+        };
+      }
+      startEliminationResultsPhase(io, lobby);
+    },
+  );
+  emitLobbyUpdate(io, lobby);
+};
+
+const startDayPhase = (io, lobby, dayNumber) => {
+  lobby.gamePhase = 'day';
+  lobby.dayNumber = dayNumber;
+  const durationMs =
+    dayNumber === 0
+      ? DAY_ZERO_DURATION_MS
+      : (lobby.phaseDurations?.daySeconds ?? 10) * 1000;
+  schedulePhaseTransition(
+    io,
+    lobby,
+    durationMs,
+    () => {
+      if (dayNumber === 0) {
+        startNightPhase(io, lobby, 1);
+      } else {
+        startVotePhase(io, lobby);
+      }
+    },
+  );
+  emitLobbyUpdate(io, lobby);
+};
+
 export const scheduleGameStart = (io, lobby) => {
   const startingAt = Date.now() + START_COUNTDOWN_MS;
   lobby.startingAt = startingAt;
+  lobby.eliminatedUserIds = new Set();
+  lobby.dayNumber = null;
+  lobby.nightNumber = null;
+  lobby.currentNightDeathReveal = null;
+  lobby.pendingNightDeathReveals = [];
 
   if (lobby.startTimeoutId) clearTimeout(lobby.startTimeoutId);
 
@@ -165,9 +344,7 @@ export const scheduleGameStart = (io, lobby) => {
     if (lobby.revealTimeoutId) clearTimeout(lobby.revealTimeoutId);
 
     lobby.revealTimeoutId = setTimeout(() => {
-      lobby.gamePhase = 'day';
-      lobby.phaseEndsAt = null;
-      emitLobbyUpdate(io, lobby);
+      startDayPhase(io, lobby, 0);
     }, ROLE_REVEAL_TOTAL_MS);
 
     emitLobbyUpdate(io, lobby);
@@ -186,8 +363,17 @@ export const endGameForLobby = (io, lobby) => {
   lobby.started = false;
   lobby.startingAt = null;
   lobby.gamePhase = 'lobby';
+  lobby.dayNumber = null;
+  lobby.nightNumber = null;
   lobby.phaseEndsAt = null;
+  lobby.currentNightDeathReveal = null;
   lobby.playerRoles = new Map();
+  lobby.playerNotebooks = new Map();
+  lobby.eliminatedUserIds = new Set();
+  lobby.pendingNightDeathReveals = [];
+  lobby.pendingNightKillTargetId = null;
+  lobby.currentVotes = new Map();
+  lobby.currentEliminationResult = null;
 
   emitLobbyUpdate(io, lobby);
   emitLobbiesList(io);
@@ -202,6 +388,23 @@ export const leaveLobby = (io, socket, lobbyName) => {
 
   socket.leave(lobby.name);
   lobby.members.delete(user.id);
+  lobby.eliminatedUserIds?.delete(user.id);
+  lobby.playerNotebooks?.delete(user.id);
+  if (lobby.pendingNightKillTargetId === user.id) {
+    lobby.pendingNightKillTargetId = null;
+  }
+  lobby.currentVotes?.delete(user.id);
+  for (const [voterId, targetId] of lobby.currentVotes?.entries() ?? []) {
+    if (targetId === user.id) {
+      lobby.currentVotes.delete(voterId);
+    }
+  }
+  lobby.pendingNightDeathReveals = (lobby.pendingNightDeathReveals ?? []).filter(
+    (entry) => entry.userId !== user.id,
+  );
+  if (lobby.currentNightDeathReveal?.userId === user.id) {
+    lobby.currentNightDeathReveal = null;
+  }
   userToLobby.delete(user.id);
 
   if (lobby.members.size === 0) {

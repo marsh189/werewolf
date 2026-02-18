@@ -169,9 +169,9 @@ export default function Lobby() {
                   extraRoles={lobbyInfo?.extraRoles ?? []}
                   phaseDurations={
                     lobbyInfo?.phaseDurations ?? {
-                      daySeconds: 60,
-                      nightSeconds: 60,
-                      voteSeconds: 30,
+                      daySeconds: 10,
+                      nightSeconds: 10,
+                      voteSeconds: 10,
                     }
                   }
                   onWerewolfChange={handleWerewolfChange}

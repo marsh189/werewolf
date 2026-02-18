@@ -1,6 +1,7 @@
 export type LobbyMember = {
   userId: string;
   name: string;
+  alive: boolean;
 };
 
 export type LobbyPhaseDurations = {
@@ -8,6 +9,24 @@ export type LobbyPhaseDurations = {
   nightSeconds: number;
   voteSeconds: number;
 };
+
+export type NightDeathReveal = {
+  userId: string;
+  name: string;
+  notebook: string;
+};
+
+export type EliminationResult =
+  | {
+      userId: string;
+      name: string;
+      notebook: string;
+      voteCount: number;
+      noElimination: false;
+    }
+  | {
+      noElimination: true;
+    };
 
 export type LobbyView = {
   lobbyName: string;
@@ -18,8 +37,19 @@ export type LobbyView = {
   werewolfCount: number;
   extraRoles: string[];
   phaseDurations: LobbyPhaseDurations;
-  gamePhase: 'lobby' | 'roleReveal' | 'day' | 'night' | 'vote';
+  gamePhase:
+    | 'lobby'
+    | 'roleReveal'
+    | 'day'
+    | 'night'
+    | 'nightResults'
+    | 'vote'
+    | 'eliminationResults';
+  dayNumber: number | null;
+  nightNumber: number | null;
   phaseEndsAt: number | null;
+  currentNightDeathReveal: NightDeathReveal | null;
+  currentEliminationResult: EliminationResult | null;
 };
 
 export type LobbyListItem = {
