@@ -163,6 +163,18 @@ export default function LobbyGamePage() {
   }, [currentPhase]);
 
   useEffect(() => {
+    const id = setTimeout(() => {
+      if (currentPhase !== 'vote') {
+        setSelectedVoteTargetId(null);
+      }
+      if (currentPhase !== 'night') {
+        setSelectedNightKillTargetId(null);
+      }
+    }, 0);
+    return () => clearTimeout(id);
+  }, [currentPhase]);
+
+  useEffect(() => {
     if (started) return;
     if (!lobbyName) return;
     router.push(`/lobby/${encodeURIComponent(lobbyName)}`);
@@ -250,7 +262,9 @@ export default function LobbyGamePage() {
           }
 
           if (canVoteNow) {
-            setSelectedVoteTargetId(member.userId);
+            setSelectedVoteTargetId((previous) =>
+              previous === member.userId ? null : member.userId,
+            );
             castVote(lobbyName, member.userId);
           }
         }}

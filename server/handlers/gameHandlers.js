@@ -107,6 +107,11 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     if (!lobby.currentVotes) {
       lobby.currentVotes = new Map();
     }
+    const currentSelection = lobby.currentVotes.get(user.id) ?? null;
+    if (currentSelection === targetUserId) {
+      lobby.currentVotes.delete(user.id);
+      return ack({ ok: true, cleared: true });
+    }
     lobby.currentVotes.set(user.id, targetUserId);
     return ack({ ok: true });
   });
