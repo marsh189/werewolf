@@ -1,7 +1,8 @@
 import { useRouter } from 'next/navigation';
 import { LobbyGuard } from './LobbyGuard';
-import RefreshIcon from './RefreshIcon';
 import LobbyCard from './LobbyCard';
+import CreateLobbyModal from './CreateLobbyModal';
+import RefreshIcon from '@/components/shared/RefreshIcon';
 import { useEffect, useMemo, useState } from 'react';
 import { socket } from '@/lib/socket';
 import type {
@@ -14,13 +15,10 @@ import type {
 export default function LobbySelect() {
   const router = useRouter();
 
-  const [lobbyName, setLobbyName] = useState('');
   const [search, setSearch] = useState('');
   const [errorMessage, setErrorMessage] = useState<string>('');
 
   const [lobbies, setLobbies] = useState<LobbyListItem[]>([]);
-  const [loadingLobbies, setLoadingLobbies] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
   const [openOnly, setOpenOnly] = useState(false);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newLobbyName, setNewLobbyName] = useState('');
@@ -42,14 +40,10 @@ export default function LobbySelect() {
 
   const requestLobbiesList = () => {
     setErrorMessage('');
-    setRefreshing(true);
 
     socket
       .timeout(5000)
-      .emit('lobbiesList', {}, (err: any, res: ListAck<LobbyListItem>) => {
-        setRefreshing(false);
-        setLoadingLobbies(false);
-
+      .emit('lobbiesList', {}, (err: unknown, res: ListAck<LobbyListItem>) => {
         if (err) {
           setErrorMessage('Server did not respond. Try refresh again.');
           return;
@@ -75,7 +69,7 @@ export default function LobbySelect() {
       .emit(
         'joinLobby',
         { lobbyName: trimmed },
-        (err: any, response: JoinAck) => {
+        (err: unknown, response: JoinAck) => {
           if (err) {
             setErrorMessage('Join request timed out.');
             return;
@@ -85,7 +79,6 @@ export default function LobbySelect() {
             setErrorMessage(response?.error ?? 'Could not join lobby.');
             return;
           }
-          console.log(response.lobbyName);
           router.push(`/lobby/${encodeURIComponent(response.lobbyName)}`);
         },
       );
@@ -103,7 +96,7 @@ export default function LobbySelect() {
       .emit(
         'createLobby',
         { lobbyName: trimmed },
-        (err: any, response: CreateAck) => {
+        (err: unknown, response: CreateAck) => {
           setCreatingLobby(false);
           if (err) {
             setErrorMessage('Create lobby request timed out.');
@@ -127,15 +120,17 @@ export default function LobbySelect() {
 
     const onOpenLobbies = (list: LobbyListItem[]) => {
       setLobbies(list ?? []);
-      setLoadingLobbies(false);
     };
 
     socket.on('lobbiesList', onOpenLobbies);
 
     // initial load
-    requestLobbiesList();
+    const kickoffId = setTimeout(() => {
+      requestLobbiesList();
+    }, 0);
 
     return () => {
+      clearTimeout(kickoffId);
       socket.off('lobbiesList', onOpenLobbies);
     };
   }, []);
@@ -178,13 +173,12 @@ export default function LobbySelect() {
               </span>
               <input
                 id="lobby-search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
                 className="game-input py-2 pl-10 bg-slate-900/70 border-slate-700/80"
                 placeholder="Find a game"
               />
             </div>
-            <button className="game-button-primary py-2 md:w-auto md:px-6">
-              Search
-            </button>
             <div className="flex items-center gap-2 text-sm text-slate-300">
               <input
                 id="open-lobbies"
@@ -239,7 +233,6 @@ export default function LobbySelect() {
                       memberCount={lobby.memberCount}
                       status={lobby.started}
                       onJoin={(name) => {
-                        setLobbyName(name);
                         joinByName(name);
                       }}
                     />
@@ -250,58 +243,14 @@ export default function LobbySelect() {
           </div>
         </div>
       </div>
-      {isCreateOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-6"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="create-lobby-title"
-        >
-          <div className="w-full max-w-md rounded-2xl border border-slate-700/70 bg-slate-900/95 p-6 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h2
-                id="create-lobby-title"
-                className="game-table-head"
-              >
-                Create Lobby
-              </h2>
-            </div>
-
-            <div className="mt-4">
-              <label className="sr-only" htmlFor="new-lobby-name">
-                Lobby Name
-              </label>
-              <input
-                id="new-lobby-name"
-                value={newLobbyName}
-                onChange={(e) => setNewLobbyName(e.target.value)}
-                className="game-input py-2"
-                placeholder="Enter lobby name"
-                required
-                autoFocus
-              />
-            </div>
-
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <button
-                type="button"
-                className="game-button-secondary py-2 px-4 md:w-auto"
-                onClick={() => setIsCreateOpen(false)}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="game-button-primary py-2 px-4 md:w-auto"
-                onClick={() => createLobby(newLobbyName)}
-                disabled={creatingLobby || !newLobbyName.trim()}
-              >
-                {creatingLobby ? 'Creating...' : 'Create'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <CreateLobbyModal
+        isOpen={isCreateOpen}
+        newLobbyName={newLobbyName}
+        creatingLobby={creatingLobby}
+        onNameChange={setNewLobbyName}
+        onCreate={() => createLobby(newLobbyName)}
+        onClose={() => setIsCreateOpen(false)}
+      />
     </LobbyGuard>
   );
 }

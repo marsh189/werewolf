@@ -18,6 +18,8 @@ export type LobbyView = {
   werewolfCount: number;
   extraRoles: string[];
   phaseDurations: LobbyPhaseDurations;
+  gamePhase: 'lobby' | 'roleReveal' | 'day' | 'night' | 'vote';
+  phaseEndsAt: number | null;
 };
 
 export type LobbyListItem = {

@@ -1,6 +1,6 @@
 'use client';
 
-import Navbar from '@/components/Navbar';
+import Navbar from '@/components/shared/Navbar';
 import Link from 'next/link';
 import { useState } from 'react';
 import { signIn } from 'next-auth/react';

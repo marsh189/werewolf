@@ -12,6 +12,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Next.js generated type validation files
+    "types/routes.d.ts",
+    "types/validator.ts",
   ]),
 ]);
 

@@ -1,42 +1,25 @@
 'use client';
 
-import { LobbyGuard } from '@/components/LobbyGuard';
 import { socket } from '@/lib/socket';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Navbar from '@/components/Navbar';
+import LobbyHeaderStatus from '@/components/lobby/LobbyHeaderStatus';
+import LobbyMembersList from '@/components/lobby/LobbyMembersList';
+import LobbySettings from '@/components/lobby/LobbySettings';
+import Navbar from '@/components/shared/Navbar';
 import { useSession } from 'next-auth/react';
-import LobbySettings from '@/components/LobbySettings';
-import type { LobbyView, LobbySettingsUpdate } from '@/models/lobby';
+import { useLobbyRealtime } from '@/lib/useLobbyRealtime';
+import type { LobbySettingsUpdate } from '@/models/lobby';
+type SocketAck = { ok: boolean; error?: string };
 
 export default function Lobby() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const { lobbyName } = useParams<{ lobbyName: string }>();
 
-  const [lobbyInfo, setLobbyInfo] = useState<LobbyView | null>(null);
-  const [nowMs, setNowMs] = useState<number>(Date.now());
-
-  useEffect(() => {
-    if (!lobbyName) return;
-
-    socket.emit('initiateLobby', { lobbyName }, (response: any) => {
-      if (!response.ok) {
-        console.log(response.error);
-        return;
-      }
-      setLobbyInfo(response.lobbyInfo);
-    });
-
-    const onUpdate = (data: LobbyView) => setLobbyInfo(data);
-
-    socket.on('update', onUpdate);
-
-    return () => {
-      socket.off('update', onUpdate);
-    };
-  }, [lobbyName]);
+  const { lobbyInfo, setLobbyInfo } = useLobbyRealtime(lobbyName);
+  const [nowMs, setNowMs] = useState<number | null>(null);
 
   useEffect(() => {
     if (!lobbyInfo?.started) return;
@@ -48,13 +31,19 @@ export default function Lobby() {
 
   useEffect(() => {
     if (!lobbyInfo?.startingAt) return;
+    const kickoffId = setTimeout(() => {
+      setNowMs(Date.now());
+    }, 0);
     const id = setInterval(() => {
       setNowMs(Date.now());
     }, 250);
-    return () => clearInterval(id);
+    return () => {
+      clearTimeout(kickoffId);
+      clearInterval(id);
+    };
   }, [lobbyInfo?.startingAt]);
 
-  const startingRemainingSeconds = lobbyInfo?.startingAt
+  const startingRemainingSeconds = lobbyInfo?.startingAt && nowMs !== null
     ? Math.max(0, Math.ceil((lobbyInfo.startingAt - nowMs) / 1000))
     : null;
 
@@ -63,13 +52,11 @@ export default function Lobby() {
       ? lobbyInfo.hostUserId === session.user.id
       : false;
 
-  console.log(session?.user.id);
-
   const updateLobbySettings = (next: LobbySettingsUpdate) => {
     if (!lobbyName) return;
     socket
       .timeout(5000)
-      .emit('lobby:updateSettings', { lobbyName, ...next }, (err: any, res: any) => {
+      .emit('lobby:updateSettings', { lobbyName, ...next }, (err: unknown, res: SocketAck | undefined) => {
         if (err || !res?.ok) {
           console.error(res?.error ?? 'Failed to update lobby settings');
           return;
@@ -124,65 +111,28 @@ export default function Lobby() {
   };
 
   return (
-    <LobbyGuard>
+    <>
       <Navbar />
       <div className="min-h-screen flex flex-col items-center px-6 py-12">
         <div className="w-full max-w-6xl">
-          <div className="flex items-center gap-4 mb-6">
-            <h1 className="game-title text-left">
-              {lobbyInfo?.lobbyName ?? 'Loading Lobby...'}
-            </h1>
-
-            {lobbyInfo && (
-              <span
-                className={[
-                  'px-3 py-1 rounded-full text-xs font-semibold border',
-                  lobbyInfo.started
-                    ? 'bg-red-500/10 text-red-200 border-red-500/30'
-                    : 'bg-sky-500/10 text-sky-200 border-sky-500/30',
-                ].join(' ')}
-              >
-                {lobbyInfo.started
-                  ? 'In Progress'
-                  : startingRemainingSeconds !== null
-                    ? `Starting... ${startingRemainingSeconds}`
-                    : 'Waiting'}
-              </span>
-            )}
-          </div>
+          {lobbyInfo ? (
+            <LobbyHeaderStatus
+              lobbyName={lobbyInfo.lobbyName}
+              started={lobbyInfo.started}
+              startingRemainingSeconds={startingRemainingSeconds}
+            />
+          ) : (
+            <div className="flex items-center gap-4 mb-6">
+              <h1 className="game-title text-left">Loading Lobby...</h1>
+            </div>
+          )}
 
           <div className="flex flex-col gap-8 lg:flex-row lg:items-stretch min-h-[70vh]">
             <div className="w-full lg:w-1/3 flex flex-col">
-              {/* Members */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="game-section-title">
-                    Players
-                  </h2>
-                </div>
-
-                <div className="space-y-3">
-                  {lobbyInfo?.members?.length ? (
-                    lobbyInfo.members.map((member) => (
-                      <div key={member.userId} className="game-box">
-                        <span className="text-white font-semibold">
-                          {member.name}
-                        </span>
-
-                        <span className="text-xs text-slate-400">
-                          {member.userId === lobbyInfo.hostUserId ? 'Host' : ''}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="game-box">
-                      <span className="text-slate-300">
-                        No members yet (or still loading)...
-                      </span>
-                    </div>
-                  )}
-                </div>
-              </div>
+              <LobbyMembersList
+                members={lobbyInfo?.members ?? []}
+                hostUserId={lobbyInfo?.hostUserId ?? ''}
+              />
 
               {/* Actions (placeholders; wire up later) */}
 
@@ -249,10 +199,9 @@ export default function Lobby() {
                           lobbyInfo.startingAt !== null
                         }
                         onClick={() => {
-                          // hook up later: socket.emit('startGame', { lobbyName })
                           socket
                             .timeout(5000)
-                            .emit('startGame', { lobbyName }, (err: any, res: any) => {
+                            .emit('startGame', { lobbyName }, (err: unknown, res: SocketAck | undefined) => {
                               if (err || !res?.ok) {
                                 console.error(res?.error ?? 'Failed to start game');
                               }
@@ -271,6 +220,6 @@ export default function Lobby() {
               </div>
             </div>
       </div>
-    </LobbyGuard>
+    </>
   );
 }

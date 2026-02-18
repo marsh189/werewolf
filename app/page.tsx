@@ -1,8 +1,8 @@
 'use client';
 
-import LobbySelect from '@/components/LobbySelect';
-import Login from '@/components/Login';
-import Navbar from '@/components/Navbar';
+import Login from '@/components/auth/Login';
+import LobbySelect from '@/components/lobby/LobbySelect';
+import Navbar from '@/components/shared/Navbar';
 import { socket } from '@/lib/socket';
 import { useSession } from 'next-auth/react';
 import { useEffect } from 'react';
@@ -15,17 +15,14 @@ export default function HomePage() {
 
     if (!socket.connected) socket.connect();
 
-    socket.on('connect', () => {
-      console.log('✅ socket connected:', socket.id);
-    });
-
-    socket.on('connect_error', (err) => {
-      console.error('❌ connect_error:', err.message);
-    });
+    const onConnect = () => {};
+    const onConnectError = () => {};
+    socket.on('connect', onConnect);
+    socket.on('connect_error', onConnectError);
 
     return () => {
-      socket.off('connect');
-      socket.off('connect_error');
+      socket.off('connect', onConnect);
+      socket.off('connect_error', onConnectError);
     };
   }, [session]);
 

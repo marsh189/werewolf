@@ -126,6 +126,61 @@ body {
   }
 }
 
+.reveal-scene {
+  background:
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.05) 0%, rgba(2, 6, 23, 0.95) 38%, rgba(0, 0, 0, 1) 75%),
+    #000;
+}
+
+.reveal-prefix {
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  font-size: 0.8rem;
+  color: rgba(226, 232, 240, 0.75);
+}
+
+.reveal-role {
+  font-size: clamp(2.5rem, 10vw, 5.8rem);
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.reveal-role-werewolf {
+  color: #ef4444;
+  text-shadow:
+    0 0 10px rgba(239, 68, 68, 0.65),
+    0 0 34px rgba(239, 68, 68, 0.5),
+    0 0 68px rgba(239, 68, 68, 0.35);
+}
+
+.reveal-role-villager {
+  color: #f8fafc;
+  text-shadow:
+    0 0 10px rgba(248, 250, 252, 0.6),
+    0 0 28px rgba(148, 163, 184, 0.45);
+}
+
+.reveal-role-special {
+  color: #22d3ee;
+  text-shadow:
+    0 0 10px rgba(34, 211, 238, 0.7),
+    0 0 34px rgba(34, 211, 238, 0.5),
+    0 0 68px rgba(34, 211, 238, 0.35);
+}
+
+.reveal-role-placeholder {
+  color: transparent;
+  text-shadow: none;
+}
+
+.reveal-subtitle {
+  color: rgba(203, 213, 225, 0.88);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+
 /* ---------- Scrollbars ---------- */
 .lobby-scroll {
   scrollbar-width: thin;
