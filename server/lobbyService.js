@@ -6,10 +6,42 @@ import {
   ROLE_REVEAL_TOTAL_MS,
   START_COUNTDOWN_MS,
 } from './constants.js';
-import { lobbies, userToLobby } from './state.js';
+import {
+  getLobby,
+  deleteLobby,
+  deleteUserLobby,
+  getLobbyEntries,
+  setLobby,
+  setUserLobby,
+} from './state.js';
+import { parseLobbyNameInput } from './validators.js';
+
+const clearRoundState = (lobby) => {
+  lobby.dayNumber = null;
+  lobby.nightNumber = null;
+  lobby.phaseEndsAt = null;
+  lobby.currentNightDeathReveal = null;
+  lobby.pendingNightDeathReveals = [];
+  lobby.pendingNightKillTargetId = null;
+  lobby.currentVotes = new Map();
+  lobby.currentEliminationResult = null;
+};
+
+const clearPlayerGameData = (lobby) => {
+  lobby.playerRoles = new Map();
+  lobby.playerNotebooks = new Map();
+  lobby.eliminatedUserIds = new Set();
+};
+
+export const resetGameState = (lobby, { resetPlayers = true } = {}) => {
+  clearRoundState(lobby);
+  if (resetPlayers) {
+    clearPlayerGameData(lobby);
+  }
+};
 
 export const createLobby = (name, hostUser) => {
-  return {
+  const lobby = {
     name,
     hostUserId: hostUser.id,
     createdAt: Date.now(),
@@ -20,21 +52,12 @@ export const createLobby = (name, hostUser) => {
     extraRoles: [],
     phaseDurations: { ...DEFAULT_PHASE_DURATIONS },
     gamePhase: 'lobby',
-    dayNumber: null,
-    nightNumber: null,
-    phaseEndsAt: null,
-    currentNightDeathReveal: null,
-    playerRoles: new Map(),
-    playerNotebooks: new Map(),
-    eliminatedUserIds: new Set(),
-    pendingNightDeathReveals: [],
-    pendingNightKillTargetId: null,
-    currentVotes: new Map(),
-    currentEliminationResult: null,
     revealTimeoutId: null,
     phaseTimeoutId: null,
     members: new Map(),
   };
+  resetGameState(lobby, { resetPlayers: true });
+  return lobby;
 };
 
 export const buildLobbyInfo = (lobby) => {
@@ -70,7 +93,7 @@ const publicLobbyView = ([lobbyName, lobby]) => {
 };
 
 export const getLobbies = () => {
-  return [...lobbies.entries()]
+  return [...getLobbyEntries()]
     .map(publicLobbyView)
     .sort((a, b) => b.memberCount - a.memberCount);
 };
@@ -88,10 +111,7 @@ export const getAck = (callback) =>
   typeof callback === 'function' ? callback : () => {};
 
 export const parseLobbyName = (data) => {
-  const { lobbyName } = data ?? {};
-  if (!lobbyName || typeof lobbyName !== 'string') return null;
-  const name = lobbyName.trim();
-  return name || null;
+  return parseLobbyNameInput(data);
 };
 
 export const clearLobbyTimeouts = (lobby) => {
@@ -326,11 +346,8 @@ const startDayPhase = (io, lobby, dayNumber) => {
 export const scheduleGameStart = (io, lobby) => {
   const startingAt = Date.now() + START_COUNTDOWN_MS;
   lobby.startingAt = startingAt;
+  clearRoundState(lobby);
   lobby.eliminatedUserIds = new Set();
-  lobby.dayNumber = null;
-  lobby.nightNumber = null;
-  lobby.currentNightDeathReveal = null;
-  lobby.pendingNightDeathReveals = [];
 
   if (lobby.startTimeoutId) clearTimeout(lobby.startTimeoutId);
 
@@ -363,17 +380,7 @@ export const endGameForLobby = (io, lobby) => {
   lobby.started = false;
   lobby.startingAt = null;
   lobby.gamePhase = 'lobby';
-  lobby.dayNumber = null;
-  lobby.nightNumber = null;
-  lobby.phaseEndsAt = null;
-  lobby.currentNightDeathReveal = null;
-  lobby.playerRoles = new Map();
-  lobby.playerNotebooks = new Map();
-  lobby.eliminatedUserIds = new Set();
-  lobby.pendingNightDeathReveals = [];
-  lobby.pendingNightKillTargetId = null;
-  lobby.currentVotes = new Map();
-  lobby.currentEliminationResult = null;
+  resetGameState(lobby, { resetPlayers: true });
 
   emitLobbyUpdate(io, lobby);
   emitLobbiesList(io);
@@ -383,7 +390,7 @@ export const leaveLobby = (io, socket, lobbyName) => {
   const user = socket.data.user;
   if (!lobbyName) return;
 
-  const lobby = lobbies.get(lobbyName);
+  const lobby = getLobby(lobbyName);
   if (!lobby) return;
 
   socket.leave(lobby.name);
@@ -405,11 +412,11 @@ export const leaveLobby = (io, socket, lobbyName) => {
   if (lobby.currentNightDeathReveal?.userId === user.id) {
     lobby.currentNightDeathReveal = null;
   }
-  userToLobby.delete(user.id);
+  deleteUserLobby(user.id);
 
   if (lobby.members.size === 0) {
     clearLobbyTimeouts(lobby);
-    lobbies.delete(lobbyName);
+    deleteLobby(lobbyName);
   }
 
   if (
@@ -428,8 +435,8 @@ export const leaveLobby = (io, socket, lobbyName) => {
 export const joinLobby = (io, socket, lobby) => {
   const user = socket.data.user;
   lobby.members.set(user.id, createMember(user, socket.id));
-  lobbies.set(lobby.name, lobby);
-  userToLobby.set(user.id, lobby.name);
+  setLobby(lobby.name, lobby);
+  setUserLobby(user.id, lobby.name);
 
   socket.join(lobby.name);
 
