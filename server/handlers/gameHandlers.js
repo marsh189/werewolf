@@ -8,6 +8,7 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     if (!requireLobbyMembership(lobby, user.id, ack)) return;
 
     const myRole = lobby.playerRoles.get(user.id) ?? null;
+    const myRoleState = lobby.playerRoleState?.get(user.id) ?? {};
     const werewolfUserIds =
       myRole === 'Werewolf'
         ? Array.from(lobby.playerRoles.entries())
@@ -27,6 +28,12 @@ export const registerGameHandlers = ({ io, socket, user }) => {
         currentEliminationResult: lobby.currentEliminationResult ?? null,
         role: myRole,
         werewolfUserIds,
+        hunterShotsRemaining: myRole === 'Hunter' ? (myRoleState.hunterShotsRemaining ?? 0) : null,
+        trapperAlertsRemaining: myRole === 'Trapper' ? (myRoleState.trapperAlertsRemaining ?? 0) : null,
+        trapperAlertActive:
+          myRole === 'Trapper'
+            ? (lobby.pendingTrapperAlertUserIds?.has(user.id) ?? false)
+            : false,
         hostUserId: lobby.hostUserId,
         canWriteNotebook: !lobby.eliminatedUserIds?.has(user.id),
       },
@@ -74,14 +81,61 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       return ack({ ok: false, error: 'Dead players cannot act' });
     }
     const myRole = lobby.playerRoles.get(user.id);
-    if (myRole !== 'Werewolf') {
-      return ack({ ok: false, error: 'Only werewolves can kill at night' });
+    if (myRole !== 'Werewolf' && myRole !== 'Hunter') {
+      return ack({ ok: false, error: 'Your role cannot perform a night kill' });
+    }
+    if (myRole === 'Hunter' && targetUserId === user.id) {
+      return ack({ ok: false, error: 'Hunter cannot target themselves' });
     }
     if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
       return ack({ ok: false, error: 'Target must be alive and in lobby' });
     }
 
-    lobby.pendingNightKillTargetId = targetUserId;
+    if (myRole === 'Werewolf') {
+      lobby.pendingWerewolfKillTargetId = targetUserId;
+    } else {
+      if (!lobby.pendingHunterKillTargets) {
+        lobby.pendingHunterKillTargets = new Map();
+      }
+      const myRoleState = lobby.playerRoleState?.get(user.id);
+      if ((myRoleState?.hunterShotsRemaining ?? 0) <= 0) {
+        return ack({ ok: false, error: 'No Hunter shots remaining' });
+      }
+      lobby.pendingHunterKillTargets.set(user.id, targetUserId);
+    }
+    emitLobbyUpdate(io, lobby);
+    return ack({ ok: true });
+  });
+
+  socket.on('game:toggleTrapperAlert', (data, callback) => {
+    const { ack, lobby } = requireAckAndLobby(data, callback);
+    if (!lobby) return;
+    if (!requireLobbyMembership(lobby, user.id, ack)) return;
+
+    if (lobby.gamePhase !== 'night') {
+      return ack({ ok: false, error: 'Not in night phase' });
+    }
+    if (lobby.eliminatedUserIds?.has(user.id)) {
+      return ack({ ok: false, error: 'Dead players cannot act' });
+    }
+    const myRole = lobby.playerRoles.get(user.id);
+    if (myRole !== 'Trapper') {
+      return ack({ ok: false, error: 'Only Trapper can alert' });
+    }
+    const myRoleState = lobby.playerRoleState?.get(user.id);
+    if ((myRoleState?.trapperAlertsRemaining ?? 0) <= 0) {
+      return ack({ ok: false, error: 'No Trapper alerts remaining' });
+    }
+    if (!lobby.pendingTrapperAlertUserIds) {
+      lobby.pendingTrapperAlertUserIds = new Set();
+    }
+    if (lobby.pendingTrapperAlertUserIds.has(user.id)) {
+      return ack({ ok: false, error: 'Trapper alert already active for this night' });
+    }
+
+    myRoleState.trapperAlertsRemaining -= 1;
+    lobby.playerRoleState?.set(user.id, myRoleState);
+    lobby.pendingTrapperAlertUserIds.add(user.id);
     emitLobbyUpdate(io, lobby);
     return ack({ ok: true });
   });

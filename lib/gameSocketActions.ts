@@ -25,6 +25,10 @@ export const nightKill = (lobbyName: string, targetUserId: string) => {
   socket.emit('game:nightKill', { lobbyName, targetUserId });
 };
 
+export const toggleTrapperAlert = (lobbyName: string) => {
+  socket.emit('game:toggleTrapperAlert', { lobbyName });
+};
+
 export const castVote = (lobbyName: string, targetUserId: string) => {
   socket.emit('game:castVote', { lobbyName, targetUserId });
 };

@@ -22,13 +22,16 @@ const clearRoundState = (lobby) => {
   lobby.phaseEndsAt = null;
   lobby.currentNightDeathReveal = null;
   lobby.pendingNightDeathReveals = [];
-  lobby.pendingNightKillTargetId = null;
+  lobby.pendingWerewolfKillTargetId = null;
+  lobby.pendingHunterKillTargets = new Map();
+  lobby.pendingTrapperAlertUserIds = new Set();
   lobby.currentVotes = new Map();
   lobby.currentEliminationResult = null;
 };
 
 const clearPlayerGameData = (lobby) => {
   lobby.playerRoles = new Map();
+  lobby.playerRoleState = new Map();
   lobby.playerNotebooks = new Map();
   lobby.eliminatedUserIds = new Set();
 };
@@ -164,6 +167,106 @@ const NEUTRAL_SPECIAL_ROLES = [
   'Executioner',
 ];
 
+const VILLAGE_ROLE_CATEGORY_BY_ROLE = {
+  Doctor: 'Support',
+  Tracker: 'Information',
+  Lookout: 'Information',
+  Investigator: 'Information',
+  Hunter: 'Killing',
+  Trapper: 'Control',
+  Escort: 'Control',
+  Sentinel: 'Support',
+};
+
+const pickRandomItems = (items, count) => shuffle(items).slice(0, count);
+
+const getVillageCategoryTargets = (slots) => {
+  const targets = {
+    Killing: 0,
+    Information: 0,
+    Support: 0,
+    Control: 0,
+  };
+
+  if (slots <= 0) return targets;
+  if (slots === 1) {
+    targets.Information = 1;
+    return targets;
+  }
+  if (slots === 2) {
+    targets.Information = 1;
+    targets.Support = 1;
+    return targets;
+  }
+  if (slots === 3) {
+    targets.Information = 1;
+    targets.Support = 1;
+    targets.Control = 1;
+    return targets;
+  }
+  if (slots === 4) {
+    targets.Killing = 1;
+    targets.Information = 1;
+    targets.Support = 1;
+    targets.Control = 1;
+    return targets;
+  }
+
+  targets.Killing = 1;
+  targets.Information = 2;
+  targets.Support = 1;
+  targets.Control = 1;
+
+  let remaining = slots - 5;
+  const growthOrder = ['Support', 'Control', 'Information'];
+  let index = 0;
+  while (remaining > 0) {
+    const category = growthOrder[index % growthOrder.length];
+    targets[category] += 1;
+    remaining -= 1;
+    index += 1;
+  }
+
+  return targets;
+};
+
+const selectVillageSpecialRoles = (slots) => {
+  if (slots <= 0) return [];
+
+  const byCategory = {
+    Killing: [],
+    Information: [],
+    Support: [],
+    Control: [],
+  };
+
+  for (const role of VILLAGE_SPECIAL_ROLES) {
+    const category = VILLAGE_ROLE_CATEGORY_BY_ROLE[role];
+    if (category && byCategory[category]) {
+      byCategory[category].push(role);
+    }
+  }
+
+  const targets = getVillageCategoryTargets(slots);
+  const selected = [];
+
+  for (const category of Object.keys(byCategory)) {
+    const needed = targets[category] ?? 0;
+    if (needed <= 0) continue;
+    selected.push(...pickRandomItems(byCategory[category], needed));
+  }
+
+  if (selected.length >= slots) {
+    return selected.slice(0, slots);
+  }
+
+  const remainingPool = VILLAGE_SPECIAL_ROLES.filter(
+    (role) => !selected.includes(role),
+  );
+  selected.push(...pickRandomItems(remainingPool, slots - selected.length));
+  return selected;
+};
+
 const buildRoleDeck = (
   memberCount,
   werewolfCount,
@@ -178,15 +281,19 @@ const buildRoleDeck = (
     Math.min(maxWerewolves, Number(werewolfCount) || 1),
   );
 
-  const normalizedExtraRoles = specialRolesEnabled
-    ? [
-        ...VILLAGE_SPECIAL_ROLES,
-        ...(neutralRolesEnabled ? NEUTRAL_SPECIAL_ROLES : []),
-      ]
-    : [];
-
   const availableSpecialSlots = Math.max(0, memberCount - safeWerewolfCount);
-  const specialRoles = normalizedExtraRoles.slice(0, availableSpecialSlots);
+  let selectedNeutralRoles = [];
+  if (specialRolesEnabled && neutralRolesEnabled && availableSpecialSlots > 0) {
+    selectedNeutralRoles = pickRandomItems(NEUTRAL_SPECIAL_ROLES, 1);
+  }
+  const villageSpecialSlots = Math.max(
+    0,
+    availableSpecialSlots - selectedNeutralRoles.length,
+  );
+  const selectedVillageRoles = specialRolesEnabled
+    ? selectVillageSpecialRoles(villageSpecialSlots)
+    : [];
+  const specialRoles = shuffle([...selectedVillageRoles, ...selectedNeutralRoles]);
   const villagerCount = memberCount - safeWerewolfCount - specialRoles.length;
 
   return [
@@ -214,6 +321,15 @@ export const assignRolesToLobby = (lobby) => {
   }
 
   lobby.playerRoles = nextRoles;
+  lobby.playerRoleState = new Map(
+    Array.from(nextRoles.entries()).map(([userId, role]) => [
+      userId,
+      {
+        hunterShotsRemaining: role === 'Hunter' ? 3 : 0,
+        trapperAlertsRemaining: role === 'Trapper' ? 3 : 0,
+      },
+    ]),
+  );
 };
 
 const schedulePhaseTransition = (io, lobby, durationMs, onComplete) => {
@@ -225,12 +341,27 @@ const schedulePhaseTransition = (io, lobby, durationMs, onComplete) => {
   }, durationMs);
 };
 
+const isVillageRole = (role) =>
+  role !== 'Werewolf' && role !== 'Jester' && role !== 'Executioner';
+
+const getAliveWerewolfIds = (lobby, aliveAtNightStart) =>
+  Array.from(lobby.playerRoles.entries())
+    .filter(
+      ([userId, role]) =>
+        role === 'Werewolf' &&
+        aliveAtNightStart.has(userId) &&
+        !lobby.eliminatedUserIds.has(userId),
+    )
+    .map(([userId]) => userId);
+
 const startNightPhase = (io, lobby, nightNumber) => {
   lobby.gamePhase = 'night';
   lobby.nightNumber = nightNumber;
   lobby.currentNightDeathReveal = null;
   lobby.pendingNightDeathReveals = [];
-  lobby.pendingNightKillTargetId = null;
+  lobby.pendingWerewolfKillTargetId = null;
+  lobby.pendingHunterKillTargets = new Map();
+  lobby.pendingTrapperAlertUserIds = new Set();
   lobby.currentVotes = new Map();
   lobby.currentEliminationResult = null;
   schedulePhaseTransition(
@@ -238,17 +369,69 @@ const startNightPhase = (io, lobby, nightNumber) => {
     lobby,
     (lobby.phaseDurations?.nightSeconds ?? 10) * 1000,
     () => {
-      const targetId = lobby.pendingNightKillTargetId;
-      if (targetId && lobby.members.has(targetId) && !lobby.eliminatedUserIds.has(targetId)) {
-        lobby.eliminatedUserIds.add(targetId);
-        const member = lobby.members.get(targetId);
+      const aliveAtNightStart = new Set(
+        Array.from(lobby.members.keys()).filter(
+          (userId) => !lobby.eliminatedUserIds.has(userId),
+        ),
+      );
+      const deaths = new Set();
+      const alertedTrappers = lobby.pendingTrapperAlertUserIds ?? new Set();
+
+      const werewolfTargetId = lobby.pendingWerewolfKillTargetId;
+      if (
+        werewolfTargetId &&
+        aliveAtNightStart.has(werewolfTargetId) &&
+        alertedTrappers.has(werewolfTargetId)
+      ) {
+        const aliveWerewolfIds = getAliveWerewolfIds(lobby, aliveAtNightStart);
+        if (aliveWerewolfIds.length > 0) {
+          const randomWerewolfId =
+            aliveWerewolfIds[Math.floor(Math.random() * aliveWerewolfIds.length)];
+          deaths.add(randomWerewolfId);
+        }
+      } else if (werewolfTargetId && aliveAtNightStart.has(werewolfTargetId)) {
+        deaths.add(werewolfTargetId);
+      }
+
+      for (const [hunterUserId, targetUserId] of (
+        lobby.pendingHunterKillTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(hunterUserId)) continue;
+        if (!aliveAtNightStart.has(targetUserId)) continue;
+
+        const roleState = lobby.playerRoleState?.get(hunterUserId);
+        const shotsRemaining = roleState?.hunterShotsRemaining ?? 0;
+        if (shotsRemaining <= 0) continue;
+
+        roleState.hunterShotsRemaining = shotsRemaining - 1;
+        lobby.playerRoleState?.set(hunterUserId, roleState);
+
+        if (alertedTrappers.has(targetUserId)) {
+          deaths.add(hunterUserId);
+          continue;
+        }
+
+        deaths.add(targetUserId);
+        const targetRole = lobby.playerRoles.get(targetUserId);
+        if (isVillageRole(targetRole)) {
+          deaths.add(hunterUserId);
+        }
+      }
+
+      for (const userId of deaths) {
+        if (!lobby.members.has(userId) || lobby.eliminatedUserIds.has(userId)) continue;
+        lobby.eliminatedUserIds.add(userId);
+        const member = lobby.members.get(userId);
         lobby.pendingNightDeathReveals.push({
-          userId: targetId,
+          userId,
           name: member?.name ?? 'Unknown Player',
-          notebook: lobby.playerNotebooks?.get(targetId) ?? '',
+          notebook: lobby.playerNotebooks?.get(userId) ?? '',
         });
       }
-      lobby.pendingNightKillTargetId = null;
+
+      lobby.pendingWerewolfKillTargetId = null;
+      lobby.pendingHunterKillTargets = new Map();
+      lobby.pendingTrapperAlertUserIds = new Set();
       startNightResultsPhase(io, lobby);
     },
   );
@@ -422,9 +605,17 @@ export const leaveLobby = (io, socket, lobbyName) => {
   lobby.members.delete(user.id);
   lobby.eliminatedUserIds?.delete(user.id);
   lobby.playerNotebooks?.delete(user.id);
-  if (lobby.pendingNightKillTargetId === user.id) {
-    lobby.pendingNightKillTargetId = null;
+  if (lobby.pendingWerewolfKillTargetId === user.id) {
+    lobby.pendingWerewolfKillTargetId = null;
   }
+  lobby.pendingHunterKillTargets?.delete(user.id);
+  for (const [hunterUserId, targetUserId] of lobby.pendingHunterKillTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingHunterKillTargets.delete(hunterUserId);
+    }
+  }
+  lobby.pendingTrapperAlertUserIds?.delete(user.id);
+  lobby.playerRoleState?.delete(user.id);
   lobby.currentVotes?.delete(user.id);
   for (const [voterId, targetId] of lobby.currentVotes?.entries() ?? []) {
     if (targetId === user.id) {

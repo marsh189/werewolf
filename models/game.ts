@@ -22,6 +22,9 @@ export type GameInitResponse = {
     currentEliminationResult: EliminationResult | null;
     role: string | null;
     werewolfUserIds: string[];
+    hunterShotsRemaining: number | null;
+    trapperAlertsRemaining: number | null;
+    trapperAlertActive: boolean;
     hostUserId: string;
     canWriteNotebook: boolean;
   };
