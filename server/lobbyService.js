@@ -49,7 +49,8 @@ export const createLobby = (name, hostUser) => {
     startingAt: null,
     startTimeoutId: null,
     werewolfCount: 1,
-    extraRoles: [],
+    specialRolesEnabled: false,
+    neutralRolesEnabled: false,
     phaseDurations: { ...DEFAULT_PHASE_DURATIONS },
     gamePhase: 'lobby',
     revealTimeoutId: null,
@@ -72,7 +73,8 @@ export const buildLobbyInfo = (lobby) => {
     started: lobby.started,
     startingAt: lobby.startingAt,
     werewolfCount: lobby.werewolfCount ?? 1,
-    extraRoles: Array.isArray(lobby.extraRoles) ? lobby.extraRoles : [],
+    specialRolesEnabled: lobby.specialRolesEnabled === true,
+    neutralRolesEnabled: lobby.neutralRolesEnabled === true,
     phaseDurations: lobby.phaseDurations ?? { ...DEFAULT_PHASE_DURATIONS },
     gamePhase: lobby.gamePhase ?? 'lobby',
     dayNumber: lobby.dayNumber ?? null,
@@ -146,7 +148,28 @@ const shuffle = (items) => {
   return result;
 };
 
-const buildRoleDeck = (memberCount, werewolfCount, extraRoles) => {
+const VILLAGE_SPECIAL_ROLES = [
+  'Doctor',
+  'Tracker',
+  'Lookout',
+  'Investigator',
+  'Hunter',
+  'Trapper',
+  'Escort',
+  'Sentinel',
+];
+
+const NEUTRAL_SPECIAL_ROLES = [
+  'Jester',
+  'Executioner',
+];
+
+const buildRoleDeck = (
+  memberCount,
+  werewolfCount,
+  specialRolesEnabled,
+  neutralRolesEnabled,
+) => {
   if (memberCount <= 0) return [];
 
   const maxWerewolves = memberCount === 1 ? 1 : memberCount - 1;
@@ -155,14 +178,11 @@ const buildRoleDeck = (memberCount, werewolfCount, extraRoles) => {
     Math.min(maxWerewolves, Number(werewolfCount) || 1),
   );
 
-  const normalizedExtraRoles = Array.isArray(extraRoles)
-    ? extraRoles.filter(
-        (role) =>
-          typeof role === 'string' &&
-          role.trim() &&
-          role !== 'Werewolf' &&
-          role !== 'Villager',
-      )
+  const normalizedExtraRoles = specialRolesEnabled
+    ? [
+        ...VILLAGE_SPECIAL_ROLES,
+        ...(neutralRolesEnabled ? NEUTRAL_SPECIAL_ROLES : []),
+      ]
     : [];
 
   const availableSpecialSlots = Math.max(0, memberCount - safeWerewolfCount);
@@ -179,7 +199,12 @@ const buildRoleDeck = (memberCount, werewolfCount, extraRoles) => {
 export const assignRolesToLobby = (lobby) => {
   const members = Array.from(lobby.members.values());
   const deck = shuffle(
-    buildRoleDeck(members.length, lobby.werewolfCount, lobby.extraRoles),
+    buildRoleDeck(
+      members.length,
+      lobby.werewolfCount,
+      lobby.specialRolesEnabled === true,
+      lobby.neutralRolesEnabled === true,
+    ),
   );
   const shuffledMembers = shuffle(members);
   const nextRoles = new Map();

@@ -35,7 +35,8 @@ export type LobbyView = {
   started: boolean;
   startingAt: number | null;
   werewolfCount: number;
-  extraRoles: string[];
+  specialRolesEnabled: boolean;
+  neutralRolesEnabled: boolean;
   phaseDurations: LobbyPhaseDurations;
   gamePhase:
     | 'lobby'
@@ -75,17 +76,19 @@ export type CreateAck = JoinAck;
 
 export type LobbySettingsUpdate = {
   werewolfCount: number;
-  extraRoles: string[];
+  specialRolesEnabled: boolean;
+  neutralRolesEnabled: boolean;
   phaseDurations?: LobbyPhaseDurations;
 };
 
 export type LobbySettingsProps = {
   isHost: boolean;
   werewolfCount: number;
-  extraRoles: string[];
+  specialRolesEnabled: boolean;
+  neutralRolesEnabled: boolean;
   phaseDurations: LobbyPhaseDurations;
   onWerewolfChange: (count: number) => void;
-  onAddRole: (role: string) => void;
-  onRemoveRole: (role: string) => void;
+  onSpecialRolesEnabledChange: (enabled: boolean) => void;
+  onNeutralRolesEnabledChange: (enabled: boolean) => void;
   onPhaseChange: (next: LobbyPhaseDurations) => void;
 };

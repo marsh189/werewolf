@@ -10,7 +10,7 @@ export default function LobbyHeaderStatus({
   startingRemainingSeconds,
 }: LobbyHeaderStatusProps) {
   return (
-    <div className="flex items-center gap-4 mb-6">
+    <div className="flex items-center gap-3 mb-3">
       <h1 className="game-title text-left">{lobbyName}</h1>
       <span
         className={[

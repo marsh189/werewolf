@@ -20,10 +20,9 @@ export const parseTargetUserId = (data) => {
 export const sanitizeWerewolfCount = (input) =>
   Math.max(1, Number(input) || 1);
 
-export const sanitizeExtraRoles = (roles) => {
-  if (!Array.isArray(roles)) return [];
-  return Array.from(new Set(roles.filter((role) => typeof role === 'string')));
-};
+export const sanitizeSpecialRolesEnabled = (input) => input === true;
+
+export const sanitizeNeutralRolesEnabled = (input) => input === true;
 
 export const sanitizePhaseDurations = (phaseDurations, minSeconds = 10) => {
   if (!phaseDurations || typeof phaseDurations !== 'object') return null;

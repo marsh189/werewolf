@@ -12,8 +12,9 @@ import {
   emitLobbyUpdate,
 } from '../lobbyService.js';
 import {
-  sanitizeExtraRoles,
+  sanitizeNeutralRolesEnabled,
   sanitizePhaseDurations,
+  sanitizeSpecialRolesEnabled,
   sanitizeWerewolfCount,
 } from '../validators.js';
 import {
@@ -124,9 +125,19 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
       return ack({ ok: false, error: 'Only host can update settings' });
     }
 
-    const { werewolfCount, extraRoles, phaseDurations } = data ?? {};
+    const {
+      werewolfCount,
+      specialRolesEnabled,
+      neutralRolesEnabled,
+      phaseDurations,
+    } = data ?? {};
     lobby.werewolfCount = sanitizeWerewolfCount(werewolfCount);
-    lobby.extraRoles = sanitizeExtraRoles(extraRoles);
+    if (typeof specialRolesEnabled === 'boolean') {
+      lobby.specialRolesEnabled = sanitizeSpecialRolesEnabled(specialRolesEnabled);
+    }
+    if (typeof neutralRolesEnabled === 'boolean') {
+      lobby.neutralRolesEnabled = sanitizeNeutralRolesEnabled(neutralRolesEnabled);
+    }
     const nextDurations = sanitizePhaseDurations(phaseDurations, 10);
     if (nextDurations) {
       lobby.phaseDurations = nextDurations;

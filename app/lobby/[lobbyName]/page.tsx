@@ -71,28 +71,30 @@ export default function Lobby() {
     if (!lobbyInfo) return;
     updateLobbySettings({
       werewolfCount: Math.max(1, count),
-      extraRoles: lobbyInfo.extraRoles ?? [],
+      specialRolesEnabled: lobbyInfo.specialRolesEnabled ?? false,
+      neutralRolesEnabled: lobbyInfo.neutralRolesEnabled ?? false,
       phaseDurations: lobbyInfo.phaseDurations,
     });
   };
 
-  const handleAddRole = (role: string) => {
+  const handleSpecialRolesEnabledChange = (enabled: boolean) => {
     if (!lobbyInfo) return;
-    const nextRoles = lobbyInfo.extraRoles?.includes(role)
-      ? lobbyInfo.extraRoles
-      : [...(lobbyInfo.extraRoles ?? []), role];
     updateLobbySettings({
       werewolfCount: lobbyInfo.werewolfCount ?? 1,
-      extraRoles: nextRoles,
+      specialRolesEnabled: enabled,
+      neutralRolesEnabled: enabled
+        ? (lobbyInfo.neutralRolesEnabled ?? false)
+        : false,
       phaseDurations: lobbyInfo.phaseDurations,
     });
   };
 
-  const handleRemoveRole = (role: string) => {
+  const handleNeutralRolesEnabledChange = (enabled: boolean) => {
     if (!lobbyInfo) return;
     updateLobbySettings({
       werewolfCount: lobbyInfo.werewolfCount ?? 1,
-      extraRoles: (lobbyInfo.extraRoles ?? []).filter((r) => r !== role),
+      specialRolesEnabled: lobbyInfo.specialRolesEnabled ?? false,
+      neutralRolesEnabled: enabled,
       phaseDurations: lobbyInfo.phaseDurations,
     });
   };
@@ -105,7 +107,8 @@ export default function Lobby() {
     if (!lobbyInfo) return;
     updateLobbySettings({
       werewolfCount: lobbyInfo.werewolfCount ?? 1,
-      extraRoles: lobbyInfo.extraRoles ?? [],
+      specialRolesEnabled: lobbyInfo.specialRolesEnabled ?? false,
+      neutralRolesEnabled: lobbyInfo.neutralRolesEnabled ?? false,
       phaseDurations: next,
     });
   };
@@ -113,7 +116,7 @@ export default function Lobby() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen flex flex-col items-center px-6 py-12">
+      <div className="min-h-screen flex flex-col items-center px-4 py-4 md:px-6 md:py-6">
         <div className="w-full max-w-6xl">
           {lobbyInfo ? (
             <LobbyHeaderStatus
@@ -122,21 +125,19 @@ export default function Lobby() {
               startingRemainingSeconds={startingRemainingSeconds}
             />
           ) : (
-            <div className="flex items-center gap-4 mb-6">
+            <div className="flex items-center gap-4 mb-3">
               <h1 className="game-title text-left">Loading Lobby...</h1>
             </div>
           )}
 
-          <div className="flex flex-col gap-8 lg:flex-row lg:items-stretch min-h-[70vh]">
-            <div className="w-full lg:w-1/3 flex flex-col">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
+            <div className="w-full lg:w-1/3 flex flex-col gap-4">
               <LobbyMembersList
                 members={lobbyInfo?.members ?? []}
                 hostUserId={lobbyInfo?.hostUserId ?? ''}
               />
 
-              {/* Actions (placeholders; wire up later) */}
-
-              <div className="mt-auto pt-10 space-y-3">
+              <div className="pt-2 space-y-2">
                 {sessionStatus === 'loading' && (
                   <div className="text-xs text-slate-400">
                     Checking session...
@@ -154,19 +155,20 @@ export default function Lobby() {
                 </button>
               </div>
             </div>
+
             <div className="hidden lg:block w-px bg-gradient-to-b from-transparent via-sky-400/60 to-transparent" />
-            <div className="w-full lg:w-2/3 lg:pl-8 flex flex-col">
+
+            <div className="w-full lg:w-2/3 lg:pl-6 flex flex-col">
               <div className="flex items-center justify-between">
-                <h2 className="game-section-title">
-                  Settings
-                </h2>
+                <h2 className="game-section-title">Settings</h2>
               </div>
 
-              <div className="mt-6">
+              <div className="mt-4">
                 <LobbySettings
                   isHost={isHost}
                   werewolfCount={lobbyInfo?.werewolfCount ?? 1}
-                  extraRoles={lobbyInfo?.extraRoles ?? []}
+                  specialRolesEnabled={lobbyInfo?.specialRolesEnabled ?? false}
+                  neutralRolesEnabled={lobbyInfo?.neutralRolesEnabled ?? false}
                   phaseDurations={
                     lobbyInfo?.phaseDurations ?? {
                       daySeconds: 10,
@@ -175,50 +177,48 @@ export default function Lobby() {
                     }
                   }
                   onWerewolfChange={handleWerewolfChange}
-                  onAddRole={handleAddRole}
-                  onRemoveRole={handleRemoveRole}
+                  onSpecialRolesEnabledChange={handleSpecialRolesEnabledChange}
+                  onNeutralRolesEnabledChange={handleNeutralRolesEnabledChange}
                   onPhaseChange={handlePhaseChange}
                 />
               </div>
 
-              {/* Actions (placeholders; wire up later) */}
-
-              <div className="mt-auto pt-10 space-y-3">
+              <div className="pt-4 space-y-2">
                 {sessionStatus === 'loading' && (
                   <div className="text-xs text-slate-400">
                     Checking session...
                   </div>
                 )}
-                    {isHost && (
-                      <button
-                        type="button"
-                        className="game-button-primary disabled:opacity-60 disabled:cursor-not-allowed"
-                        disabled={
-                          !lobbyInfo ||
-                          lobbyInfo.started ||
-                          lobbyInfo.startingAt !== null
-                        }
-                        onClick={() => {
-                          socket
-                            .timeout(5000)
-                            .emit('startGame', { lobbyName }, (err: unknown, res: SocketAck | undefined) => {
-                              if (err || !res?.ok) {
-                                console.error(res?.error ?? 'Failed to start game');
-                              }
-                            });
-                        }}
-                      >
-                        {lobbyInfo?.startingAt !== null
-                          ? 'Starting...'
-                          : lobbyInfo?.started
-                            ? 'Game Started'
-                            : 'Start Game'}
-                      </button>
-                    )}
-                  </div>
-                </div>
+                {isHost && (
+                  <button
+                    type="button"
+                    className="game-button-primary disabled:opacity-60 disabled:cursor-not-allowed"
+                    disabled={
+                      !lobbyInfo ||
+                      lobbyInfo.started ||
+                      lobbyInfo.startingAt !== null
+                    }
+                    onClick={() => {
+                      socket
+                        .timeout(5000)
+                        .emit('startGame', { lobbyName }, (err: unknown, res: SocketAck | undefined) => {
+                          if (err || !res?.ok) {
+                            console.error(res?.error ?? 'Failed to start game');
+                          }
+                        });
+                    }}
+                  >
+                    {lobbyInfo?.startingAt !== null
+                      ? 'Starting...'
+                      : lobbyInfo?.started
+                        ? 'Game Started'
+                        : 'Start Game'}
+                  </button>
+                )}
               </div>
             </div>
+          </div>
+        </div>
       </div>
     </>
   );
