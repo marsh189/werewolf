@@ -25,6 +25,8 @@ export type GameInitResponse = {
     hunterShotsRemaining: number | null;
     trapperAlertsRemaining: number | null;
     trapperAlertActive: boolean;
+    executionerTargetUserId: string | null;
+    executionerTargetName: string | null;
     hostUserId: string;
     canWriteNotebook: boolean;
   };

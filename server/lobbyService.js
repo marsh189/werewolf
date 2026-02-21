@@ -26,6 +26,7 @@ const clearRoundState = (lobby) => {
   lobby.pendingHunterKillTargets = new Map();
   lobby.pendingTrapperAlertUserIds = new Set();
   lobby.currentVotes = new Map();
+  lobby.actionTimestamps = new Map();
   lobby.currentEliminationResult = null;
 };
 
@@ -35,6 +36,12 @@ const clearPlayerGameData = (lobby) => {
   lobby.playerNotebooks = new Map();
   lobby.eliminatedUserIds = new Set();
 };
+
+const createInitialRoleState = (role) => ({
+  hunterShotsRemaining: role === 'Hunter' ? 3 : 0,
+  trapperAlertsRemaining: role === 'Trapper' ? 3 : 0,
+  executionerTargetUserId: null,
+});
 
 export const resetGameState = (lobby, { resetPlayers = true } = {}) => {
   clearRoundState(lobby);
@@ -321,15 +328,68 @@ export const assignRolesToLobby = (lobby) => {
   }
 
   lobby.playerRoles = nextRoles;
-  lobby.playerRoleState = new Map(
+  const initialRoleState = new Map(
     Array.from(nextRoles.entries()).map(([userId, role]) => [
       userId,
-      {
-        hunterShotsRemaining: role === 'Hunter' ? 3 : 0,
-        trapperAlertsRemaining: role === 'Trapper' ? 3 : 0,
-      },
+      createInitialRoleState(role),
     ]),
   );
+  const executionerIds = Array.from(nextRoles.entries())
+    .filter(([, role]) => role === 'Executioner')
+    .map(([userId]) => userId);
+  for (const executionerUserId of executionerIds) {
+    const candidateTargetIds = Array.from(nextRoles.entries())
+      .filter(
+        ([targetUserId, targetRole]) =>
+          targetUserId !== executionerUserId &&
+          targetRole !== 'Werewolf' &&
+          targetRole !== 'Executioner' &&
+          targetRole !== 'Jester',
+      )
+      .map(([targetUserId]) => targetUserId);
+    const selectedTargetUserId = candidateTargetIds.length
+      ? shuffle(candidateTargetIds)[0]
+      : null;
+    const roleState = initialRoleState.get(executionerUserId) ?? {
+      hunterShotsRemaining: 0,
+      trapperAlertsRemaining: 0,
+      executionerTargetUserId: null,
+    };
+    roleState.executionerTargetUserId = selectedTargetUserId;
+    initialRoleState.set(executionerUserId, roleState);
+  }
+  lobby.playerRoleState = initialRoleState;
+};
+
+export const addNightDeathReveal = (lobby, userId) => {
+  if (!lobby.members.has(userId) || lobby.eliminatedUserIds.has(userId)) return false;
+  lobby.eliminatedUserIds.add(userId);
+  const member = lobby.members.get(userId);
+  lobby.pendingNightDeathReveals.push({
+    userId,
+    name: member?.name ?? 'Unknown Player',
+    notebook: lobby.playerNotebooks?.get(userId) ?? '',
+  });
+  return true;
+};
+
+export const convertExecutionersToJesterForNightDeaths = (
+  lobby,
+  nightDeathUserIds,
+) => {
+  const nightDeaths = nightDeathUserIds instanceof Set
+    ? nightDeathUserIds
+    : new Set(nightDeathUserIds ?? []);
+  for (const [userId, role] of lobby.playerRoles.entries()) {
+    if (role !== 'Executioner') continue;
+    if (lobby.eliminatedUserIds.has(userId)) continue;
+    const roleState = lobby.playerRoleState?.get(userId);
+    const targetUserId = roleState?.executionerTargetUserId ?? null;
+    if (!targetUserId || !nightDeaths.has(targetUserId)) continue;
+    lobby.playerRoles.set(userId, 'Jester');
+    roleState.executionerTargetUserId = null;
+    lobby.playerRoleState?.set(userId, roleState);
+  }
 };
 
 const schedulePhaseTransition = (io, lobby, durationMs, onComplete) => {
@@ -419,15 +479,10 @@ const startNightPhase = (io, lobby, nightNumber) => {
       }
 
       for (const userId of deaths) {
-        if (!lobby.members.has(userId) || lobby.eliminatedUserIds.has(userId)) continue;
-        lobby.eliminatedUserIds.add(userId);
-        const member = lobby.members.get(userId);
-        lobby.pendingNightDeathReveals.push({
-          userId,
-          name: member?.name ?? 'Unknown Player',
-          notebook: lobby.playerNotebooks?.get(userId) ?? '',
-        });
+        addNightDeathReveal(lobby, userId);
       }
+
+      convertExecutionersToJesterForNightDeaths(lobby, deaths);
 
       lobby.pendingWerewolfKillTargetId = null;
       lobby.pendingHunterKillTargets = new Map();

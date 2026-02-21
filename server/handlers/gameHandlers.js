@@ -1,5 +1,23 @@
-import { emitLobbyUpdate } from '../lobbyService.js';
+import {
+  addNightDeathReveal,
+  convertExecutionersToJesterForNightDeaths,
+  emitLobbyUpdate,
+} from '../lobbyService.js';
 import { requireAckAndLobby, requireLobbyMembership, requireTargetUserId } from './shared.js';
+
+const isRapidAction = (lobby, userId, actionKey, minIntervalMs = 250) => {
+  if (!lobby.actionTimestamps) {
+    lobby.actionTimestamps = new Map();
+  }
+  const key = `${actionKey}:${userId}`;
+  const now = Date.now();
+  const lastAt = lobby.actionTimestamps.get(key) ?? 0;
+  if (now - lastAt < minIntervalMs) {
+    return true;
+  }
+  lobby.actionTimestamps.set(key, now);
+  return false;
+};
 
 export const registerGameHandlers = ({ io, socket, user }) => {
   socket.on('game:init', (data, callback) => {
@@ -9,6 +27,13 @@ export const registerGameHandlers = ({ io, socket, user }) => {
 
     const myRole = lobby.playerRoles.get(user.id) ?? null;
     const myRoleState = lobby.playerRoleState?.get(user.id) ?? {};
+    const executionerTargetUserId =
+      myRole === 'Executioner'
+        ? (myRoleState.executionerTargetUserId ?? null)
+        : null;
+    const executionerTargetName = executionerTargetUserId
+      ? (lobby.members.get(executionerTargetUserId)?.name ?? 'Unknown Player')
+      : null;
     const werewolfUserIds =
       myRole === 'Werewolf'
         ? Array.from(lobby.playerRoles.entries())
@@ -34,6 +59,8 @@ export const registerGameHandlers = ({ io, socket, user }) => {
           myRole === 'Trapper'
             ? (lobby.pendingTrapperAlertUserIds?.has(user.id) ?? false)
             : false,
+        executionerTargetUserId,
+        executionerTargetName,
         hostUserId: lobby.hostUserId,
         canWriteNotebook: !lobby.eliminatedUserIds?.has(user.id),
       },
@@ -90,8 +117,14 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
       return ack({ ok: false, error: 'Target must be alive and in lobby' });
     }
+    if (isRapidAction(lobby, user.id, 'nightKill')) {
+      return ack({ ok: true, throttled: true });
+    }
 
     if (myRole === 'Werewolf') {
+      if (lobby.pendingWerewolfKillTargetId === targetUserId) {
+        return ack({ ok: true, unchanged: true });
+      }
       lobby.pendingWerewolfKillTargetId = targetUserId;
     } else {
       if (!lobby.pendingHunterKillTargets) {
@@ -100,6 +133,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       const myRoleState = lobby.playerRoleState?.get(user.id);
       if ((myRoleState?.hunterShotsRemaining ?? 0) <= 0) {
         return ack({ ok: false, error: 'No Hunter shots remaining' });
+      }
+      if (lobby.pendingHunterKillTargets.get(user.id) === targetUserId) {
+        return ack({ ok: true, unchanged: true });
       }
       lobby.pendingHunterKillTargets.set(user.id, targetUserId);
     }
@@ -121,6 +157,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     const myRole = lobby.playerRoles.get(user.id);
     if (myRole !== 'Trapper') {
       return ack({ ok: false, error: 'Only Trapper can alert' });
+    }
+    if (isRapidAction(lobby, user.id, 'toggleTrapperAlert')) {
+      return ack({ ok: true, throttled: true });
     }
     const myRoleState = lobby.playerRoleState?.get(user.id);
     if ((myRoleState?.trapperAlertsRemaining ?? 0) <= 0) {
@@ -156,6 +195,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     }
     if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
       return ack({ ok: false, error: 'Votes can only target alive players' });
+    }
+    if (isRapidAction(lobby, user.id, 'castVote')) {
+      return ack({ ok: true, throttled: true });
     }
 
     if (!lobby.currentVotes) {
@@ -222,19 +264,23 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     } else {
       lobby.eliminatedUserIds.add(targetUserId);
       if (cause === 'night') {
-        const member = lobby.members.get(targetUserId);
-        const existingIndex = lobby.pendingNightDeathReveals.findIndex(
-          (entry) => entry.userId === targetUserId,
-        );
-        const revealEntry = {
-          userId: targetUserId,
-          name: member?.name ?? 'Unknown Player',
-          notebook: lobby.playerNotebooks.get(targetUserId) ?? '',
-        };
-        if (existingIndex >= 0) {
-          lobby.pendingNightDeathReveals[existingIndex] = revealEntry;
-        } else {
-          lobby.pendingNightDeathReveals.push(revealEntry);
+        convertExecutionersToJesterForNightDeaths(lobby, [targetUserId]);
+        const addedReveal = addNightDeathReveal(lobby, targetUserId);
+        if (!addedReveal) {
+          const member = lobby.members.get(targetUserId);
+          const existingIndex = lobby.pendingNightDeathReveals.findIndex(
+            (entry) => entry.userId === targetUserId,
+          );
+          const revealEntry = {
+            userId: targetUserId,
+            name: member?.name ?? 'Unknown Player',
+            notebook: lobby.playerNotebooks.get(targetUserId) ?? '',
+          };
+          if (existingIndex >= 0) {
+            lobby.pendingNightDeathReveals[existingIndex] = revealEntry;
+          } else {
+            lobby.pendingNightDeathReveals.push(revealEntry);
+          }
         }
       }
     }

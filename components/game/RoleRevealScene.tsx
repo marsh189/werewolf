@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { ROLES } from '@/models/roles';
+import type { Role } from '@/models/roles';
 
 type RoleRevealState =
   | 'hidden'
@@ -23,6 +25,11 @@ export default function RoleRevealScene({
   roleToneClass,
   endGameButton,
 }: RoleRevealSceneProps) {
+  const roleRevealSummary =
+    roleName in ROLES
+      ? ROLES[roleName as Role].revealSummary
+      : 'Hold your nerve. Dawn reveals all truths.';
+
   return (
     <div className="game-cinematic-scene min-h-screen flex items-center justify-center px-6 py-12">
       <div className="w-full max-w-3xl text-center">
@@ -66,11 +73,7 @@ export default function RoleRevealScene({
               {revealState === 'role' ||
               revealState === 'rolePre' ||
               revealState === 'fading'
-                ? roleName === 'Werewolf'
-                  ? 'Blend in. Strike at night.'
-                  : roleName === 'Villager'
-                    ? 'Find the werewolves before it is too late.'
-                    : 'Use your ability wisely.'
+                ? roleRevealSummary
                 : ' '}
             </p>
           </div>

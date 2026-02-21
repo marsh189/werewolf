@@ -10,6 +10,7 @@ import { useEffect, useRef, useState } from 'react';
 export const GAME_PHASE_ANIMATION_MS = {
   roleTitleLead: 1400,
   roleRevealHold: 3000,
+  roleRevealPostPause: 1500,
   roleRevealFade: 700,
   fadeIn: 700,
   transitionKickoff: 30,
@@ -74,7 +75,7 @@ export function useGamePhaseAnimation({
       ? Math.max(0, currentPhaseEndsAt - Date.now() - GAME_PHASE_ANIMATION_MS.roleRevealFade)
       : GAME_PHASE_ANIMATION_MS.roleTitleLead +
         GAME_PHASE_ANIMATION_MS.roleRevealHold +
-        GAME_PHASE_ANIMATION_MS.fadeIn;
+        GAME_PHASE_ANIMATION_MS.roleRevealPostPause;
     const fadeId = setTimeout(() => {
       setRevealState('fading');
     }, fadeOutDelay);
