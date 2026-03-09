@@ -25,6 +25,9 @@ export type GameInitResponse = {
     hunterShotsRemaining: number | null;
     trapperAlertsRemaining: number | null;
     trapperAlertActive: boolean;
+    escortVisitTargetUserId: string | null;
+    sentinelGuardTargetUserId: string | null;
+    doctorProtectTargetUserId: string | null;
     executionerTargetUserId: string | null;
     executionerTargetName: string | null;
     hostUserId: string;

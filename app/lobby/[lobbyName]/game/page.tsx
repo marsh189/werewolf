@@ -9,10 +9,13 @@ import PlayerList from '@/components/game/PlayerList';
 import RoleRevealScene from '@/components/game/RoleRevealScene';
 import {
   castVote,
+  doctorProtect,
   endGame,
+  escortVisit,
   getNotebook,
   initGame,
   nightKill,
+  sentinelGuard,
   toggleTrapperAlert,
   updateNotebook,
 } from '@/lib/gameSocketActions';
@@ -63,7 +66,7 @@ export default function LobbyGamePage() {
   const [executionerTargetUserId, setExecutionerTargetUserId] = useState<
     string | null
   >(null);
-  const [selectedNightKillTargetId, setSelectedNightKillTargetId] = useState<
+  const [selectedNightActionTargetId, setSelectedNightActionTargetId] = useState<
     string | null
   >(null);
   const [selectedVoteTargetId, setSelectedVoteTargetId] = useState<string | null>(
@@ -78,22 +81,32 @@ export default function LobbyGamePage() {
         console.error(response?.error ?? 'Failed to initialize game');
         return;
       }
-      setGameStarted(response.game.started);
-      setPhase(response.game.phase);
-      setDayNumber(response.game.dayNumber);
-      setNightNumber(response.game.nightNumber);
-      setPhaseEndsAt(response.game.phaseEndsAt);
-      setCurrentNightDeathReveal(response.game.currentNightDeathReveal ?? null);
-      setCurrentEliminationResult(response.game.currentEliminationResult ?? null);
-      setRole(response.game.role);
-      setWerewolfUserIds(response.game.werewolfUserIds ?? []);
-      setGameHostUserId(response.game.hostUserId);
-      setCanWriteNotebook(response.game.canWriteNotebook);
-      setHunterShotsRemaining(response.game.hunterShotsRemaining ?? 0);
-      setTrapperAlertsRemaining(response.game.trapperAlertsRemaining ?? 0);
-      setTrapperAlertActive(response.game.trapperAlertActive ?? false);
-      setExecutionerTargetName(response.game.executionerTargetName ?? null);
-      setExecutionerTargetUserId(response.game.executionerTargetUserId ?? null);
+      const game = response.game;
+      setGameStarted(game.started);
+      setPhase(game.phase);
+      setDayNumber(game.dayNumber);
+      setNightNumber(game.nightNumber);
+      setPhaseEndsAt(game.phaseEndsAt);
+      setCurrentNightDeathReveal(game.currentNightDeathReveal ?? null);
+      setCurrentEliminationResult(game.currentEliminationResult ?? null);
+      setRole(game.role);
+      setWerewolfUserIds(game.werewolfUserIds ?? []);
+      setGameHostUserId(game.hostUserId);
+      setCanWriteNotebook(game.canWriteNotebook);
+      setHunterShotsRemaining(game.hunterShotsRemaining ?? 0);
+      setTrapperAlertsRemaining(game.trapperAlertsRemaining ?? 0);
+      setTrapperAlertActive(game.trapperAlertActive ?? false);
+      setSelectedNightActionTargetId((previous) =>
+        game.role === 'Escort'
+          ? (game.escortVisitTargetUserId ?? null)
+          : game.role === 'Sentinel'
+            ? (game.sentinelGuardTargetUserId ?? null)
+            : game.role === 'Doctor'
+              ? (game.doctorProtectTargetUserId ?? null)
+          : previous,
+      );
+      setExecutionerTargetName(game.executionerTargetName ?? null);
+      setExecutionerTargetUserId(game.executionerTargetUserId ?? null);
     });
   }, [lobbyName]);
 
@@ -101,14 +114,24 @@ export default function LobbyGamePage() {
     if (!lobbyName || !lobbyInfo) return;
     initGame(lobbyName, (response: GameInitResponse) => {
       if (!response?.ok || !response.game) return;
-      setRole(response.game.role);
-      setCanWriteNotebook(response.game.canWriteNotebook);
-      setWerewolfUserIds(response.game.werewolfUserIds ?? []);
-      setHunterShotsRemaining(response.game.hunterShotsRemaining ?? 0);
-      setTrapperAlertsRemaining(response.game.trapperAlertsRemaining ?? 0);
-      setTrapperAlertActive(response.game.trapperAlertActive ?? false);
-      setExecutionerTargetName(response.game.executionerTargetName ?? null);
-      setExecutionerTargetUserId(response.game.executionerTargetUserId ?? null);
+      const game = response.game;
+      setRole(game.role);
+      setCanWriteNotebook(game.canWriteNotebook);
+      setWerewolfUserIds(game.werewolfUserIds ?? []);
+      setHunterShotsRemaining(game.hunterShotsRemaining ?? 0);
+      setTrapperAlertsRemaining(game.trapperAlertsRemaining ?? 0);
+      setTrapperAlertActive(game.trapperAlertActive ?? false);
+      setSelectedNightActionTargetId((previous) =>
+        game.role === 'Escort'
+          ? (game.escortVisitTargetUserId ?? null)
+          : game.role === 'Sentinel'
+            ? (game.sentinelGuardTargetUserId ?? null)
+            : game.role === 'Doctor'
+              ? (game.doctorProtectTargetUserId ?? null)
+          : previous,
+      );
+      setExecutionerTargetName(game.executionerTargetName ?? null);
+      setExecutionerTargetUserId(game.executionerTargetUserId ?? null);
     });
   }, [lobbyName, lobbyInfo]);
 
@@ -191,7 +214,7 @@ export default function LobbyGamePage() {
         setSelectedVoteTargetId(null);
       }
       if (currentPhase !== 'night') {
-        setSelectedNightKillTargetId(null);
+        setSelectedNightActionTargetId(null);
       }
     }, 0);
     return () => clearTimeout(id);
@@ -277,13 +300,36 @@ export default function LobbyGamePage() {
       selfAlive &&
       member.alive &&
       member.userId !== currentUserId;
+    const canEscortAtNight =
+      currentPhase === 'night' &&
+      roleName === 'Escort' &&
+      selfAlive &&
+      member.alive &&
+      member.userId !== currentUserId;
+    const canGuardAtNight =
+      currentPhase === 'night' &&
+      roleName === 'Sentinel' &&
+      selfAlive &&
+      member.alive &&
+      member.userId !== currentUserId;
+    const canProtectAtNight =
+      currentPhase === 'night' &&
+      roleName === 'Doctor' &&
+      selfAlive &&
+      member.alive;
     const canViewDeadNotebook =
       (currentPhase === 'day' || currentPhase === 'night') && !member.alive;
     const canVoteNow = currentPhase === 'vote' && selfAlive && member.alive;
-    const isActionable = canKillAtNight || canViewDeadNotebook || canVoteNow;
+    const isActionable =
+      canKillAtNight ||
+      canEscortAtNight ||
+      canGuardAtNight ||
+      canProtectAtNight ||
+      canViewDeadNotebook ||
+      canVoteNow;
     const isSelectedTarget =
       (currentPhase === 'night' &&
-        selectedNightKillTargetId === member.userId) ||
+        selectedNightActionTargetId === member.userId) ||
       (currentPhase === 'vote' && selectedVoteTargetId === member.userId);
 
     const isExecutionerTarget =
@@ -313,8 +359,26 @@ export default function LobbyGamePage() {
           if (!lobbyName || typeof lobbyName !== 'string') return;
 
           if (canKillAtNight) {
-            setSelectedNightKillTargetId(member.userId);
+            setSelectedNightActionTargetId(member.userId);
             nightKill(lobbyName, member.userId);
+            return;
+          }
+
+          if (canEscortAtNight) {
+            setSelectedNightActionTargetId(member.userId);
+            escortVisit(lobbyName, member.userId);
+            return;
+          }
+
+          if (canGuardAtNight) {
+            setSelectedNightActionTargetId(member.userId);
+            sentinelGuard(lobbyName, member.userId);
+            return;
+          }
+
+          if (canProtectAtNight) {
+            setSelectedNightActionTargetId(member.userId);
+            doctorProtect(lobbyName, member.userId);
             return;
           }
 

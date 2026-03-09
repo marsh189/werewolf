@@ -29,6 +29,18 @@ export const toggleTrapperAlert = (lobbyName: string) => {
   socket.emit('game:toggleTrapperAlert', { lobbyName });
 };
 
+export const escortVisit = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:escortVisit', { lobbyName, targetUserId });
+};
+
+export const sentinelGuard = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:sentinelGuard', { lobbyName, targetUserId });
+};
+
+export const doctorProtect = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:doctorProtect', { lobbyName, targetUserId });
+};
+
 export const castVote = (lobbyName: string, targetUserId: string) => {
   socket.emit('game:castVote', { lobbyName, targetUserId });
 };

@@ -23,8 +23,12 @@ const clearRoundState = (lobby) => {
   lobby.currentNightDeathReveal = null;
   lobby.pendingNightDeathReveals = [];
   lobby.pendingWerewolfKillTargetId = null;
+  lobby.pendingWerewolfKillActorUserId = null;
   lobby.pendingHunterKillTargets = new Map();
   lobby.pendingTrapperAlertUserIds = new Set();
+  lobby.pendingEscortVisitTargets = new Map();
+  lobby.pendingSentinelGuardTargets = new Map();
+  lobby.pendingDoctorProtectTargets = new Map();
   lobby.currentVotes = new Map();
   lobby.actionTimestamps = new Map();
   lobby.currentEliminationResult = null;
@@ -414,14 +418,59 @@ const getAliveWerewolfIds = (lobby, aliveAtNightStart) =>
     )
     .map(([userId]) => userId);
 
+const hasNightAction = (role) =>
+  role === 'Doctor' ||
+  role === 'Werewolf' ||
+  role === 'Hunter' ||
+  role === 'Trapper' ||
+  role === 'Escort' ||
+  role === 'Sentinel';
+
+const findSentinelGuardForTarget = (
+  lobby,
+  targetUserId,
+  aliveAtNightStart,
+  blockedByEscort,
+) => {
+  for (const [sentinelUserId, guardedUserId] of (
+    lobby.pendingSentinelGuardTargets?.entries() ?? []
+  )) {
+    if (guardedUserId !== targetUserId) continue;
+    if (!aliveAtNightStart.has(sentinelUserId)) continue;
+    if (!aliveAtNightStart.has(guardedUserId)) continue;
+    if (blockedByEscort.has(sentinelUserId)) continue;
+    if (lobby.playerRoles.get(sentinelUserId) !== 'Sentinel') continue;
+    return sentinelUserId;
+  }
+  return null;
+};
+
+const getDoctorProtectedUserIds = (lobby, aliveAtNightStart, blockedByEscort) => {
+  const protectedUserIds = new Set();
+  for (const [doctorUserId, protectedUserId] of (
+    lobby.pendingDoctorProtectTargets?.entries() ?? []
+  )) {
+    if (!aliveAtNightStart.has(doctorUserId)) continue;
+    if (!aliveAtNightStart.has(protectedUserId)) continue;
+    if (blockedByEscort.has(doctorUserId)) continue;
+    if (lobby.playerRoles.get(doctorUserId) !== 'Doctor') continue;
+    protectedUserIds.add(protectedUserId);
+  }
+  return protectedUserIds;
+};
+
 const startNightPhase = (io, lobby, nightNumber) => {
   lobby.gamePhase = 'night';
   lobby.nightNumber = nightNumber;
   lobby.currentNightDeathReveal = null;
   lobby.pendingNightDeathReveals = [];
   lobby.pendingWerewolfKillTargetId = null;
+  lobby.pendingWerewolfKillActorUserId = null;
   lobby.pendingHunterKillTargets = new Map();
   lobby.pendingTrapperAlertUserIds = new Set();
+  lobby.pendingEscortVisitTargets = new Map();
+  lobby.pendingSentinelGuardTargets = new Map();
+  lobby.pendingDoctorProtectTargets = new Map();
   lobby.currentVotes = new Map();
   lobby.currentEliminationResult = null;
   schedulePhaseTransition(
@@ -435,11 +484,38 @@ const startNightPhase = (io, lobby, nightNumber) => {
         ),
       );
       const deaths = new Set();
-      const alertedTrappers = lobby.pendingTrapperAlertUserIds ?? new Set();
+      const blockedByEscort = new Set();
+      for (const [escortUserId, targetUserId] of (
+        lobby.pendingEscortVisitTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(escortUserId)) continue;
+        if (!aliveAtNightStart.has(targetUserId)) continue;
+        const targetRole = lobby.playerRoles.get(targetUserId);
+        if (!hasNightAction(targetRole)) continue;
+        blockedByEscort.add(targetUserId);
+      }
+      const alertedTrappers = new Set(
+        Array.from(lobby.pendingTrapperAlertUserIds ?? new Set()).filter(
+          (userId) =>
+            aliveAtNightStart.has(userId) &&
+            !blockedByEscort.has(userId),
+        ),
+      );
+      const doctorProtectedUserIds = getDoctorProtectedUserIds(
+        lobby,
+        aliveAtNightStart,
+        blockedByEscort,
+      );
 
       const werewolfTargetId = lobby.pendingWerewolfKillTargetId;
+      const werewolfActorUserId = lobby.pendingWerewolfKillActorUserId;
       if (
         werewolfTargetId &&
+        werewolfActorUserId &&
+        !blockedByEscort.has(werewolfActorUserId) &&
+        aliveAtNightStart.has(werewolfActorUserId) &&
+        !lobby.eliminatedUserIds.has(werewolfActorUserId) &&
+        lobby.playerRoles.get(werewolfActorUserId) === 'Werewolf' &&
         aliveAtNightStart.has(werewolfTargetId) &&
         alertedTrappers.has(werewolfTargetId)
       ) {
@@ -449,14 +525,31 @@ const startNightPhase = (io, lobby, nightNumber) => {
             aliveWerewolfIds[Math.floor(Math.random() * aliveWerewolfIds.length)];
           deaths.add(randomWerewolfId);
         }
-      } else if (werewolfTargetId && aliveAtNightStart.has(werewolfTargetId)) {
-        deaths.add(werewolfTargetId);
+      } else if (
+        werewolfTargetId &&
+        werewolfActorUserId &&
+        !blockedByEscort.has(werewolfActorUserId) &&
+        aliveAtNightStart.has(werewolfActorUserId) &&
+        !lobby.eliminatedUserIds.has(werewolfActorUserId) &&
+        lobby.playerRoles.get(werewolfActorUserId) === 'Werewolf' &&
+        aliveAtNightStart.has(werewolfTargetId)
+      ) {
+        if (!doctorProtectedUserIds.has(werewolfTargetId)) {
+          const sentinelGuardUserId = findSentinelGuardForTarget(
+            lobby,
+            werewolfTargetId,
+            aliveAtNightStart,
+            blockedByEscort,
+          );
+          deaths.add(sentinelGuardUserId ?? werewolfTargetId);
+        }
       }
 
       for (const [hunterUserId, targetUserId] of (
         lobby.pendingHunterKillTargets?.entries() ?? []
       )) {
         if (!aliveAtNightStart.has(hunterUserId)) continue;
+        if (blockedByEscort.has(hunterUserId)) continue;
         if (!aliveAtNightStart.has(targetUserId)) continue;
 
         const roleState = lobby.playerRoleState?.get(hunterUserId);
@@ -471,10 +564,19 @@ const startNightPhase = (io, lobby, nightNumber) => {
           continue;
         }
 
-        deaths.add(targetUserId);
-        const targetRole = lobby.playerRoles.get(targetUserId);
-        if (isVillageRole(targetRole)) {
-          deaths.add(hunterUserId);
+        if (!doctorProtectedUserIds.has(targetUserId)) {
+          const sentinelGuardUserId = findSentinelGuardForTarget(
+            lobby,
+            targetUserId,
+            aliveAtNightStart,
+            blockedByEscort,
+          );
+          const resolvedVictimUserId = sentinelGuardUserId ?? targetUserId;
+          deaths.add(resolvedVictimUserId);
+          const resolvedVictimRole = lobby.playerRoles.get(resolvedVictimUserId);
+          if (isVillageRole(resolvedVictimRole)) {
+            deaths.add(hunterUserId);
+          }
         }
       }
 
@@ -485,8 +587,12 @@ const startNightPhase = (io, lobby, nightNumber) => {
       convertExecutionersToJesterForNightDeaths(lobby, deaths);
 
       lobby.pendingWerewolfKillTargetId = null;
+      lobby.pendingWerewolfKillActorUserId = null;
       lobby.pendingHunterKillTargets = new Map();
       lobby.pendingTrapperAlertUserIds = new Set();
+      lobby.pendingEscortVisitTargets = new Map();
+      lobby.pendingSentinelGuardTargets = new Map();
+      lobby.pendingDoctorProtectTargets = new Map();
       startNightResultsPhase(io, lobby);
     },
   );
@@ -662,6 +768,11 @@ export const leaveLobby = (io, socket, lobbyName) => {
   lobby.playerNotebooks?.delete(user.id);
   if (lobby.pendingWerewolfKillTargetId === user.id) {
     lobby.pendingWerewolfKillTargetId = null;
+    lobby.pendingWerewolfKillActorUserId = null;
+  }
+  if (lobby.pendingWerewolfKillActorUserId === user.id) {
+    lobby.pendingWerewolfKillTargetId = null;
+    lobby.pendingWerewolfKillActorUserId = null;
   }
   lobby.pendingHunterKillTargets?.delete(user.id);
   for (const [hunterUserId, targetUserId] of lobby.pendingHunterKillTargets?.entries() ?? []) {
@@ -670,6 +781,24 @@ export const leaveLobby = (io, socket, lobbyName) => {
     }
   }
   lobby.pendingTrapperAlertUserIds?.delete(user.id);
+  lobby.pendingEscortVisitTargets?.delete(user.id);
+  lobby.pendingSentinelGuardTargets?.delete(user.id);
+  lobby.pendingDoctorProtectTargets?.delete(user.id);
+  for (const [escortUserId, targetUserId] of lobby.pendingEscortVisitTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingEscortVisitTargets.delete(escortUserId);
+    }
+  }
+  for (const [sentinelUserId, targetUserId] of lobby.pendingSentinelGuardTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingSentinelGuardTargets.delete(sentinelUserId);
+    }
+  }
+  for (const [doctorUserId, targetUserId] of lobby.pendingDoctorProtectTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingDoctorProtectTargets.delete(doctorUserId);
+    }
+  }
   lobby.playerRoleState?.delete(user.id);
   lobby.currentVotes?.delete(user.id);
   for (const [voterId, targetId] of lobby.currentVotes?.entries() ?? []) {
