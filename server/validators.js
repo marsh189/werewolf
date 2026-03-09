@@ -7,7 +7,17 @@ export const parseLobbyNameInput = (data) => {
         : null;
   if (typeof value !== 'string') return null;
   const name = value.trim();
-  return name || null;
+  if (!name) return null;
+
+  // Route params may arrive URL-encoded (e.g. "My%20Lobby"); normalize to
+  // the canonical lobby key while preserving raw names if decoding fails.
+  if (!name.includes('%')) return name;
+  try {
+    const decoded = decodeURIComponent(name).trim();
+    return decoded || null;
+  } catch {
+    return name;
+  }
 };
 
 export const parseTargetUserId = (data) => {

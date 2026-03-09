@@ -12,6 +12,7 @@ import {
   emitLobbyUpdate,
 } from '../lobbyService.js';
 import {
+  parseLobbyNameInput,
   sanitizeNeutralRolesEnabled,
   sanitizePhaseDurations,
   sanitizeSpecialRolesEnabled,
@@ -48,7 +49,7 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
 
   socket.on('createLobby', ({ lobbyName }, callback) => {
     const ack = getAck(callback);
-    const name = String(lobbyName ?? '').trim();
+    const name = parseLobbyNameInput({ lobbyName });
 
     if (!name) {
       return ack({ ok: false, error: 'Invalid Lobby Name' });
