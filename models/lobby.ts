@@ -43,6 +43,7 @@ export type LobbyView = {
     | 'roleReveal'
     | 'day'
     | 'night'
+    | 'nightActionResults'
     | 'nightResults'
     | 'vote'
     | 'eliminationResults';

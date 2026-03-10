@@ -377,6 +377,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     if (!lobby.eliminatedUserIds) {
       lobby.eliminatedUserIds = new Set();
     }
+    if (!lobby.publicEliminatedUserIds) {
+      lobby.publicEliminatedUserIds = new Set();
+    }
     if (!lobby.pendingNightDeathReveals) {
       lobby.pendingNightDeathReveals = [];
     }
@@ -386,6 +389,7 @@ export const registerGameHandlers = ({ io, socket, user }) => {
 
     if (eliminated === false) {
       lobby.eliminatedUserIds.delete(targetUserId);
+      lobby.publicEliminatedUserIds.delete(targetUserId);
       if (cause === 'night') {
         lobby.pendingNightDeathReveals = lobby.pendingNightDeathReveals.filter(
           (entry) => entry.userId !== targetUserId,
@@ -412,6 +416,8 @@ export const registerGameHandlers = ({ io, socket, user }) => {
             lobby.pendingNightDeathReveals.push(revealEntry);
           }
         }
+      } else {
+        lobby.publicEliminatedUserIds.add(targetUserId);
       }
     }
 

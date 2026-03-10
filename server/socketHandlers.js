@@ -1,3 +1,4 @@
+import { registerChatHandlers } from './handlers/chatHandlers.js';
 import { registerGameHandlers } from './handlers/gameHandlers.js';
 import { registerLobbyHandlers } from './handlers/lobbyHandlers.js';
 
@@ -8,5 +9,6 @@ export const registerSocketHandlers = (io) => {
 
     registerLobbyHandlers({ io, socket, user });
     registerGameHandlers({ io, socket, user });
+    registerChatHandlers({ io, socket, user });
   });
 };

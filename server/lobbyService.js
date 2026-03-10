@@ -14,7 +14,16 @@ import {
   setLobby,
   setUserLobby,
 } from './state.js';
+import {
+  addSystemChatMessage,
+  addTargetedSystemChatMessage,
+  emitChatMessage,
+  resetLobbyChat,
+  syncLobbyChatRooms,
+} from './chatService.js';
 import { parseLobbyNameInput } from './validators.js';
+
+const NIGHT_ACTION_RESULTS_DURATION_MS = 5000;
 
 const clearRoundState = (lobby) => {
   lobby.dayNumber = null;
@@ -39,6 +48,7 @@ const clearPlayerGameData = (lobby) => {
   lobby.playerRoleState = new Map();
   lobby.playerNotebooks = new Map();
   lobby.eliminatedUserIds = new Set();
+  lobby.publicEliminatedUserIds = new Set();
 };
 
 const createInitialRoleState = (role) => ({
@@ -49,6 +59,7 @@ const createInitialRoleState = (role) => ({
 
 export const resetGameState = (lobby, { resetPlayers = true } = {}) => {
   clearRoundState(lobby);
+  resetLobbyChat(lobby);
   if (resetPlayers) {
     clearPlayerGameData(lobby);
   }
@@ -82,7 +93,7 @@ export const buildLobbyInfo = (lobby) => {
     members: Array.from(lobby.members.values()).map((m) => ({
       userId: m.userId,
       name: m.name,
-      alive: !lobby.eliminatedUserIds?.has(m.userId),
+      alive: !lobby.publicEliminatedUserIds?.has(m.userId),
     })),
     started: lobby.started,
     startingAt: lobby.startingAt,
@@ -146,6 +157,7 @@ export const clearLobbyTimeouts = (lobby) => {
 };
 
 export const emitLobbyUpdate = (io, lobby) => {
+  syncLobbyChatRooms(io, lobby);
   io.to(lobby.name).emit('update', buildLobbyInfo(lobby));
 };
 
@@ -459,6 +471,31 @@ const getDoctorProtectedUserIds = (lobby, aliveAtNightStart, blockedByEscort) =>
   return protectedUserIds;
 };
 
+const emitNightActionNotice = (
+  io,
+  lobby,
+  recipientUserIds,
+  content,
+  audience = 'private',
+) => {
+  if (!Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
+  const message = addTargetedSystemChatMessage(lobby, {
+    audience,
+    content,
+    recipientUserIds,
+  });
+  emitChatMessage(io, lobby, message);
+};
+
+const startNightActionResultsPhase = (io, lobby) => {
+  lobby.gamePhase = 'nightActionResults';
+  lobby.currentNightDeathReveal = null;
+  schedulePhaseTransition(io, lobby, NIGHT_ACTION_RESULTS_DURATION_MS, () => {
+    startNightResultsPhase(io, lobby);
+  });
+  emitLobbyUpdate(io, lobby);
+};
+
 const startNightPhase = (io, lobby, nightNumber) => {
   lobby.gamePhase = 'night';
   lobby.nightNumber = nightNumber;
@@ -473,6 +510,24 @@ const startNightPhase = (io, lobby, nightNumber) => {
   lobby.pendingDoctorProtectTargets = new Map();
   lobby.currentVotes = new Map();
   lobby.currentEliminationResult = null;
+  const werewolfNotice = addSystemChatMessage(lobby, {
+    audience: 'werewolf',
+    content: 'Werewolves can now chat secretly to decide who to kill.',
+  });
+  emitChatMessage(io, lobby, werewolfNotice);
+
+  const nonWerewolfUserIds = Array.from(lobby.members.keys()).filter((userId) => {
+    if (lobby.eliminatedUserIds?.has(userId)) return false;
+    return lobby.playerRoles?.get(userId) !== 'Werewolf';
+  });
+  if (nonWerewolfUserIds.length > 0) {
+    const villageChatLockedNotice = addTargetedSystemChatMessage(lobby, {
+      audience: 'private',
+      recipientUserIds: nonWerewolfUserIds,
+      content: 'Villagers cannot chat during the night.',
+    });
+    emitChatMessage(io, lobby, villageChatLockedNotice);
+  }
   schedulePhaseTransition(
     io,
     lobby,
@@ -485,6 +540,8 @@ const startNightPhase = (io, lobby, nightNumber) => {
       );
       const deaths = new Set();
       const blockedByEscort = new Set();
+      const attackedTargetIds = new Set();
+      const trapperVisitedUserIds = new Set();
       for (const [escortUserId, targetUserId] of (
         lobby.pendingEscortVisitTargets?.entries() ?? []
       )) {
@@ -519,6 +576,8 @@ const startNightPhase = (io, lobby, nightNumber) => {
         aliveAtNightStart.has(werewolfTargetId) &&
         alertedTrappers.has(werewolfTargetId)
       ) {
+        attackedTargetIds.add(werewolfTargetId);
+        trapperVisitedUserIds.add(werewolfTargetId);
         const aliveWerewolfIds = getAliveWerewolfIds(lobby, aliveAtNightStart);
         if (aliveWerewolfIds.length > 0) {
           const randomWerewolfId =
@@ -534,6 +593,10 @@ const startNightPhase = (io, lobby, nightNumber) => {
         lobby.playerRoles.get(werewolfActorUserId) === 'Werewolf' &&
         aliveAtNightStart.has(werewolfTargetId)
       ) {
+        attackedTargetIds.add(werewolfTargetId);
+        if (alertedTrappers.has(werewolfTargetId)) {
+          trapperVisitedUserIds.add(werewolfTargetId);
+        }
         if (!doctorProtectedUserIds.has(werewolfTargetId)) {
           const sentinelGuardUserId = findSentinelGuardForTarget(
             lobby,
@@ -558,6 +621,10 @@ const startNightPhase = (io, lobby, nightNumber) => {
 
         roleState.hunterShotsRemaining = shotsRemaining - 1;
         lobby.playerRoleState?.set(hunterUserId, roleState);
+        attackedTargetIds.add(targetUserId);
+        if (alertedTrappers.has(targetUserId)) {
+          trapperVisitedUserIds.add(targetUserId);
+        }
 
         if (alertedTrappers.has(targetUserId)) {
           deaths.add(hunterUserId);
@@ -586,6 +653,59 @@ const startNightPhase = (io, lobby, nightNumber) => {
 
       convertExecutionersToJesterForNightDeaths(lobby, deaths);
 
+      const aliveWerewolfIds = getAliveWerewolfIds(lobby, aliveAtNightStart);
+      if (werewolfTargetId && aliveWerewolfIds.length > 0) {
+        const targetName = lobby.members.get(werewolfTargetId)?.name ?? 'Your target';
+        if (!deaths.has(werewolfTargetId)) {
+          emitNightActionNotice(
+            io,
+            lobby,
+            aliveWerewolfIds,
+            `${targetName} survived the night.`,
+            'werewolf',
+          );
+        }
+      }
+
+      for (const [doctorUserId, protectedUserId] of (
+        lobby.pendingDoctorProtectTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(doctorUserId)) continue;
+        if (blockedByEscort.has(doctorUserId)) continue;
+        if (!attackedTargetIds.has(protectedUserId)) continue;
+        const targetName = lobby.members.get(protectedUserId)?.name ?? 'Your target';
+        emitNightActionNotice(
+          io,
+          lobby,
+          [doctorUserId],
+          `${targetName} was attacked during the night.`,
+        );
+      }
+
+      for (const [sentinelUserId, guardedUserId] of (
+        lobby.pendingSentinelGuardTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(sentinelUserId)) continue;
+        if (blockedByEscort.has(sentinelUserId)) continue;
+        if (!attackedTargetIds.has(guardedUserId)) continue;
+        const targetName = lobby.members.get(guardedUserId)?.name ?? 'Your target';
+        emitNightActionNotice(
+          io,
+          lobby,
+          [sentinelUserId],
+          `${targetName} was attacked during the night.`,
+        );
+      }
+
+      for (const trapperUserId of trapperVisitedUserIds) {
+        emitNightActionNotice(
+          io,
+          lobby,
+          [trapperUserId],
+          'Someone visited you during the night.',
+        );
+      }
+
       lobby.pendingWerewolfKillTargetId = null;
       lobby.pendingWerewolfKillActorUserId = null;
       lobby.pendingHunterKillTargets = new Map();
@@ -593,7 +713,7 @@ const startNightPhase = (io, lobby, nightNumber) => {
       lobby.pendingEscortVisitTargets = new Map();
       lobby.pendingSentinelGuardTargets = new Map();
       lobby.pendingDoctorProtectTargets = new Map();
-      startNightResultsPhase(io, lobby);
+      startNightActionResultsPhase(io, lobby);
     },
   );
   emitLobbyUpdate(io, lobby);
@@ -603,6 +723,16 @@ const startNightResultsPhase = (io, lobby) => {
   const reveals = Array.isArray(lobby.pendingNightDeathReveals)
     ? lobby.pendingNightDeathReveals
     : [];
+
+  for (const reveal of reveals) {
+    const deathNotice = addTargetedSystemChatMessage(lobby, {
+      audience: 'private',
+      recipientUserIds: Array.from(lobby.members.keys()),
+      content: `${reveal.name} died during the night.`,
+      tone: 'death',
+    });
+    emitChatMessage(io, lobby, deathNotice);
+  }
 
   if (!reveals.length) {
     lobby.gamePhase = 'nightResults';
@@ -617,7 +747,14 @@ const startNightResultsPhase = (io, lobby) => {
   let index = 0;
   const showNextReveal = () => {
     lobby.gamePhase = 'nightResults';
-    lobby.currentNightDeathReveal = reveals[index] ?? null;
+    const currentReveal = reveals[index] ?? null;
+    lobby.currentNightDeathReveal = currentReveal;
+    if (currentReveal?.userId) {
+      if (!lobby.publicEliminatedUserIds) {
+        lobby.publicEliminatedUserIds = new Set();
+      }
+      lobby.publicEliminatedUserIds.add(currentReveal.userId);
+    }
     schedulePhaseTransition(io, lobby, NIGHT_DEATH_REVEAL_DURATION_MS, () => {
       index += 1;
       if (index < reveals.length) {
@@ -671,6 +808,10 @@ const startVotePhase = (io, lobby) => {
 
       if (!tie && topTargetId && lobby.members.has(topTargetId) && !lobby.eliminatedUserIds.has(topTargetId)) {
         lobby.eliminatedUserIds.add(topTargetId);
+        if (!lobby.publicEliminatedUserIds) {
+          lobby.publicEliminatedUserIds = new Set();
+        }
+        lobby.publicEliminatedUserIds.add(topTargetId);
         const member = lobby.members.get(topTargetId);
         lobby.currentEliminationResult = {
           userId: topTargetId,
@@ -717,6 +858,7 @@ export const scheduleGameStart = (io, lobby) => {
   lobby.startingAt = startingAt;
   clearRoundState(lobby);
   lobby.eliminatedUserIds = new Set();
+  lobby.publicEliminatedUserIds = new Set();
 
   if (lobby.startTimeoutId) clearTimeout(lobby.startTimeoutId);
 
@@ -765,6 +907,7 @@ export const leaveLobby = (io, socket, lobbyName) => {
   socket.leave(lobby.name);
   lobby.members.delete(user.id);
   lobby.eliminatedUserIds?.delete(user.id);
+  lobby.publicEliminatedUserIds?.delete(user.id);
   lobby.playerNotebooks?.delete(user.id);
   if (lobby.pendingWerewolfKillTargetId === user.id) {
     lobby.pendingWerewolfKillTargetId = null;

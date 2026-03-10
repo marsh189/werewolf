@@ -2,6 +2,7 @@
 
 import GameNotebook from '@/components/game/GameNotebook';
 import EliminationResultsCard from '@/components/game/EliminationResultsCard';
+import GameChat from '@/components/game/GameChat';
 import NightResultsScene from '@/components/game/NightResultsScene';
 import NotebookModal from '@/components/game/NotebookModal';
 import PhaseTimer from '@/components/game/PhaseTimer';
@@ -137,6 +138,8 @@ export default function LobbyGamePage() {
 
   const started = lobbyInfo?.started ?? gameStarted;
   const currentPhase = lobbyInfo?.gamePhase ?? phase;
+  const effectiveDisplayPhase =
+    currentPhase === 'nightActionResults' ? 'night' : currentPhase;
   const currentDayNumber = lobbyInfo?.dayNumber ?? dayNumber;
   const currentNightNumber = lobbyInfo?.nightNumber ?? nightNumber;
   const currentPhaseEndsAt = lobbyInfo?.phaseEndsAt ?? phaseEndsAt;
@@ -172,26 +175,31 @@ export default function LobbyGamePage() {
     });
 
   const isDayCyclePhase =
-    currentPhase === 'day' ||
-    currentPhase === 'vote' ||
-    currentPhase === 'eliminationResults';
-  const daySubPhaseLabel =
-    currentPhase === 'day'
+    effectiveDisplayPhase === 'day' ||
+    effectiveDisplayPhase === 'vote' ||
+    effectiveDisplayPhase === 'eliminationResults';
+  const isNightCyclePhase = effectiveDisplayPhase === 'night';
+  const phaseSubLabel =
+    effectiveDisplayPhase === 'day'
       ? 'The village gathers by torchlight.'
-      : currentPhase === 'vote'
+      : effectiveDisplayPhase === 'vote'
         ? 'Whispers turn to accusations.'
-        : currentPhase === 'eliminationResults'
+      : effectiveDisplayPhase === 'eliminationResults'
           ? 'The village passes judgment.'
+            : effectiveDisplayPhase === 'night'
+              ? 'Shadows deepen and choices are made in secret.'
           : null;
-  const daySubPhaseInstruction =
-    currentPhase === 'day'
+  const phaseSubInstruction =
+    effectiveDisplayPhase === 'day'
       ? (currentDayNumber ?? 0) === 0
         ? 'Steel your nerves. The first night is coming.'
         : 'Discuss what happened last night and share suspicions.'
-      : currentPhase === 'vote'
+      : effectiveDisplayPhase === 'vote'
         ? 'Cast your vote for the player you believe is a werewolf.'
-        : currentPhase === 'eliminationResults'
+      : effectiveDisplayPhase === 'eliminationResults'
           ? 'Review the outcome and prepare for the coming night.'
+      : effectiveDisplayPhase === 'night'
+          ? 'Use your role ability before the night ends.'
           : null;
   const eliminationResultsKey =
     eliminationResult?.noElimination === true
@@ -201,24 +209,24 @@ export default function LobbyGamePage() {
         : `elim-result-waiting-${currentDayNumber ?? 0}`;
 
   useEffect(() => {
-    if (currentPhase === 'day' || currentPhase === 'night') return;
+    if (effectiveDisplayPhase === 'day' || effectiveDisplayPhase === 'night') return;
     const id = setTimeout(() => {
       setViewingNotebook(null);
     }, 0);
     return () => clearTimeout(id);
-  }, [currentPhase]);
+  }, [effectiveDisplayPhase]);
 
   useEffect(() => {
     const id = setTimeout(() => {
       if (currentPhase !== 'vote') {
         setSelectedVoteTargetId(null);
       }
-      if (currentPhase !== 'night') {
+      if (effectiveDisplayPhase !== 'night') {
         setSelectedNightActionTargetId(null);
       }
     }, 0);
     return () => clearTimeout(id);
-  }, [currentPhase]);
+  }, [currentPhase, effectiveDisplayPhase]);
 
   useEffect(() => {
     if (started) return;
@@ -229,6 +237,7 @@ export default function LobbyGamePage() {
   const isHost =
     !!session?.user?.id && !!hostUserId && session.user.id === hostUserId;
   const roleName = role ?? 'Unknown';
+  const chatRefreshKey = `${currentPhase}:${roleName}:${selfAlive ? 'alive' : 'dead'}:${started ? 'started' : 'stopped'}`;
   const roleInfo =
     role && role in ROLES ? ROLES[role as Role] : null;
   const roleToneClass =
@@ -295,30 +304,31 @@ export default function LobbyGamePage() {
 
   const renderMemberRow = (member: LobbyMember) => {
     const canKillAtNight =
-      currentPhase === 'night' &&
+      effectiveDisplayPhase === 'night' &&
       (roleName === 'Werewolf' || (roleName === 'Hunter' && hunterShotsRemaining > 0)) &&
       selfAlive &&
       member.alive &&
       member.userId !== currentUserId;
     const canEscortAtNight =
-      currentPhase === 'night' &&
+      effectiveDisplayPhase === 'night' &&
       roleName === 'Escort' &&
       selfAlive &&
       member.alive &&
       member.userId !== currentUserId;
     const canGuardAtNight =
-      currentPhase === 'night' &&
+      effectiveDisplayPhase === 'night' &&
       roleName === 'Sentinel' &&
       selfAlive &&
       member.alive &&
       member.userId !== currentUserId;
     const canProtectAtNight =
-      currentPhase === 'night' &&
+      effectiveDisplayPhase === 'night' &&
       roleName === 'Doctor' &&
       selfAlive &&
       member.alive;
     const canViewDeadNotebook =
-      (currentPhase === 'day' || currentPhase === 'night') && !member.alive;
+      (effectiveDisplayPhase === 'day' || effectiveDisplayPhase === 'night') &&
+      !member.alive;
     const canVoteNow = currentPhase === 'vote' && selfAlive && member.alive;
     const isActionable =
       canKillAtNight ||
@@ -328,7 +338,7 @@ export default function LobbyGamePage() {
       canViewDeadNotebook ||
       canVoteNow;
     const isSelectedTarget =
-      (currentPhase === 'night' &&
+      (effectiveDisplayPhase === 'night' &&
         selectedNightActionTargetId === member.userId) ||
       (currentPhase === 'vote' && selectedVoteTargetId === member.userId);
 
@@ -359,24 +369,28 @@ export default function LobbyGamePage() {
           if (!lobbyName || typeof lobbyName !== 'string') return;
 
           if (canKillAtNight) {
+            if (currentPhase !== 'night') return;
             setSelectedNightActionTargetId(member.userId);
             nightKill(lobbyName, member.userId);
             return;
           }
 
           if (canEscortAtNight) {
+            if (currentPhase !== 'night') return;
             setSelectedNightActionTargetId(member.userId);
             escortVisit(lobbyName, member.userId);
             return;
           }
 
           if (canGuardAtNight) {
+            if (currentPhase !== 'night') return;
             setSelectedNightActionTargetId(member.userId);
             sentinelGuard(lobbyName, member.userId);
             return;
           }
 
           if (canProtectAtNight) {
+            if (currentPhase !== 'night') return;
             setSelectedNightActionTargetId(member.userId);
             doctorProtect(lobbyName, member.userId);
             return;
@@ -463,7 +477,7 @@ export default function LobbyGamePage() {
         <div
           className={[
             'min-h-screen px-6 py-12',
-            currentPhase === 'night' ? 'game-cinematic-scene' : '',
+            isNightCyclePhase ? 'game-cinematic-scene' : '',
           ].join(' ')}
         >
           <header className="mx-auto w-full max-w-3xl mb-6 flex items-start justify-between gap-4">
@@ -486,32 +500,36 @@ export default function LobbyGamePage() {
                 <h1 className="game-title">
                   {isDayCyclePhase
                     ? `Day ${currentDayNumber ?? 0}`
-                    : currentPhase === 'night'
+                    : isNightCyclePhase
                       ? `Night ${currentNightNumber ?? 1}`
                       : 'Game'}
                 </h1>
-                {daySubPhaseLabel ? (
+                {phaseSubLabel ? (
                   <p className="text-slate-300/90 text-xs uppercase tracking-[0.2em]">
-                    {daySubPhaseLabel}
+                    {phaseSubLabel}
                   </p>
                 ) : null}
-                {daySubPhaseInstruction ? (
+                {phaseSubInstruction ? (
                   <p className="text-slate-300 text-sm">
-                    {daySubPhaseInstruction}
+                    {phaseSubInstruction}
                   </p>
                 ) : null}
               </>
               <div className="flex flex-col items-center gap-3">
                 <PhaseTimer phaseEndsAt={currentPhaseEndsAt} />
-                {currentPhase === 'night' &&
+                {effectiveDisplayPhase === 'night' &&
                 roleName === 'Trapper' &&
                 selfAlive ? (
                   <button
                     type="button"
                     className="game-button-secondary max-w-xs mx-auto"
-                    disabled={trapperAlertActive || trapperAlertsRemaining <= 0}
+                    disabled={
+                      currentPhase !== 'night' ||
+                      trapperAlertActive ||
+                      trapperAlertsRemaining <= 0
+                    }
                     onClick={() => {
-                      if (!lobbyName) return;
+                      if (!lobbyName || currentPhase !== 'night') return;
                       toggleTrapperAlert(lobbyName);
                     }}
                   >
@@ -535,6 +553,13 @@ export default function LobbyGamePage() {
           </div>
         </div>
       )}
+      {currentPhase !== 'nightResults' ? (
+        <GameChat
+          lobbyName={typeof lobbyName === 'string' ? lobbyName : undefined}
+          refreshKey={chatRefreshKey}
+          currentUserId={session?.user?.id}
+        />
+      ) : null}
       {currentPhase !== 'roleReveal' ? (
         <GameNotebook
           lobbyName={typeof lobbyName === 'string' ? lobbyName : undefined}

@@ -5,6 +5,7 @@ export type GamePhase =
   | 'roleReveal'
   | 'day'
   | 'night'
+  | 'nightActionResults'
   | 'nightResults'
   | 'vote'
   | 'eliminationResults';
@@ -38,6 +39,38 @@ export type GameInitResponse = {
 export type SocketAck = {
   ok: boolean;
   error?: string;
+};
+
+export type ChatChannel = 'village';
+export type ChatAudience = 'village' | 'werewolf' | 'dead';
+
+export type ChatMessage = {
+  id: string;
+  channel: ChatChannel;
+  audience: ChatAudience;
+  recipientUserIds?: string[];
+  tone?: 'default' | 'death';
+  userId: string;
+  name: string;
+  content: string;
+  sentAt: number;
+};
+
+export type ChatState = {
+  channels: ChatChannel[];
+  canSend: Partial<Record<ChatChannel, boolean>>;
+  history: Partial<Record<ChatChannel, ChatMessage[]>>;
+};
+
+export type ChatInitResponse = {
+  ok: boolean;
+  error?: string;
+  chat?: ChatState;
+};
+
+export type ChatSendResponse = SocketAck & {
+  throttled?: boolean;
+  message?: ChatMessage;
 };
 
 export type NotebookView = {

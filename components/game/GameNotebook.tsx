@@ -53,7 +53,12 @@ export default function GameNotebook({
   }, [notes, onNotesChange]);
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-[min(92vw,24rem)]">
+    <div
+      className={[
+        'fixed bottom-4 right-4 z-40',
+        isOpen ? 'w-[min(92vw,24rem)]' : 'w-auto',
+      ].join(' ')}
+    >
       {isOpen ? (
         <div className="rounded-2xl border border-slate-700 bg-slate-900/95 p-4 shadow-2xl backdrop-blur">
           <div className="mb-3 flex items-center justify-between">
@@ -85,10 +90,14 @@ export default function GameNotebook({
       ) : (
         <button
           type="button"
-          className="game-button-secondary px-4 py-2 md:w-auto"
+          aria-label="Open notebook"
+          title="Open notebook"
+          className="inline-flex h-12 w-12 items-center justify-center rounded-full border border-slate-700 bg-slate-900/95 text-slate-100 shadow-2xl transition hover:bg-slate-800"
           onClick={() => setIsOpen(true)}
         >
-          Open Notebook
+          <span className="text-lg leading-none" aria-hidden="true">
+            {'\u270E'}
+          </span>
         </button>
       )}
     </div>

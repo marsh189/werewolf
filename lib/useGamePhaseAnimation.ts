@@ -176,9 +176,10 @@ export function useGamePhaseAnimation({
     previousPhaseRef.current = currentPhase;
 
     const skipFadeIn =
-      previousPhase === 'day' &&
-      currentPhase === 'vote' &&
-      (currentDayNumber ?? 0) > 0;
+      ((previousPhase === 'day' &&
+        currentPhase === 'vote' &&
+        (currentDayNumber ?? 0) > 0) ||
+        (previousPhase === 'night' && currentPhase === 'nightActionResults'));
     if (skipFadeIn) return;
 
     const startId = setTimeout(() => {
@@ -203,7 +204,9 @@ export function useGamePhaseAnimation({
 
   useEffect(() => {
     if (!currentPhaseEndsAt) return;
-    const skipFadeOut = currentPhase === 'day' && (currentDayNumber ?? 0) > 0;
+    const skipFadeOut =
+      (currentPhase === 'day' && (currentDayNumber ?? 0) > 0) ||
+      currentPhase === 'night';
     if (skipFadeOut) return;
 
     const delay = Math.max(

@@ -2,6 +2,9 @@
 
 import { socket } from '@/lib/socket';
 import type {
+  ChatChannel,
+  ChatInitResponse,
+  ChatSendResponse,
   GameInitResponse,
   NotebookResponse,
   SocketAck,
@@ -55,4 +58,20 @@ export const getNotebook = (
   callback: (response: NotebookResponse) => void,
 ) => {
   socket.emit('game:getNotebook', { lobbyName, targetUserId }, callback);
+};
+
+export const initChat = (
+  lobbyName: string,
+  callback: (response: ChatInitResponse) => void,
+) => {
+  socket.emit('chat:init', { lobbyName }, callback);
+};
+
+export const sendChatMessage = (
+  lobbyName: string,
+  channel: ChatChannel,
+  content: string,
+  callback: (response: ChatSendResponse) => void,
+) => {
+  socket.emit('chat:send', { lobbyName, channel, content }, callback);
 };
