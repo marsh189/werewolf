@@ -69,8 +69,9 @@ export default function Lobby() {
 
   const handleWerewolfChange = (count: number) => {
     if (!lobbyInfo) return;
+    const minWerewolves = (lobbyInfo.specialRolesEnabled ?? false) ? 2 : 1;
     updateLobbySettings({
-      werewolfCount: Math.max(1, count),
+      werewolfCount: Math.max(minWerewolves, count),
       specialRolesEnabled: lobbyInfo.specialRolesEnabled ?? false,
       neutralRolesEnabled: lobbyInfo.neutralRolesEnabled ?? false,
       phaseDurations: lobbyInfo.phaseDurations,
@@ -79,8 +80,13 @@ export default function Lobby() {
 
   const handleSpecialRolesEnabledChange = (enabled: boolean) => {
     if (!lobbyInfo) return;
+    const minWerewolves = enabled ? 2 : 1;
+    const nextWerewolfCount = Math.max(
+      minWerewolves,
+      lobbyInfo.werewolfCount ?? minWerewolves,
+    );
     updateLobbySettings({
-      werewolfCount: lobbyInfo.werewolfCount ?? 1,
+      werewolfCount: nextWerewolfCount,
       specialRolesEnabled: enabled,
       neutralRolesEnabled: enabled
         ? (lobbyInfo.neutralRolesEnabled ?? false)
@@ -91,8 +97,12 @@ export default function Lobby() {
 
   const handleNeutralRolesEnabledChange = (enabled: boolean) => {
     if (!lobbyInfo) return;
+    const minWerewolves = (lobbyInfo.specialRolesEnabled ?? false) ? 2 : 1;
     updateLobbySettings({
-      werewolfCount: lobbyInfo.werewolfCount ?? 1,
+      werewolfCount: Math.max(
+        minWerewolves,
+        lobbyInfo.werewolfCount ?? minWerewolves,
+      ),
       specialRolesEnabled: lobbyInfo.specialRolesEnabled ?? false,
       neutralRolesEnabled: enabled,
       phaseDurations: lobbyInfo.phaseDurations,
@@ -105,8 +115,12 @@ export default function Lobby() {
     voteSeconds: number;
   }) => {
     if (!lobbyInfo) return;
+    const minWerewolves = (lobbyInfo.specialRolesEnabled ?? false) ? 2 : 1;
     updateLobbySettings({
-      werewolfCount: lobbyInfo.werewolfCount ?? 1,
+      werewolfCount: Math.max(
+        minWerewolves,
+        lobbyInfo.werewolfCount ?? minWerewolves,
+      ),
       specialRolesEnabled: lobbyInfo.specialRolesEnabled ?? false,
       neutralRolesEnabled: lobbyInfo.neutralRolesEnabled ?? false,
       phaseDurations: next,
@@ -166,7 +180,10 @@ export default function Lobby() {
               <div className="mt-4">
                 <LobbySettings
                   isHost={isHost}
-                  werewolfCount={lobbyInfo?.werewolfCount ?? 1}
+                  werewolfCount={Math.max(
+                    (lobbyInfo?.specialRolesEnabled ?? false) ? 2 : 1,
+                    lobbyInfo?.werewolfCount ?? 1,
+                  )}
                   specialRolesEnabled={lobbyInfo?.specialRolesEnabled ?? false}
                   neutralRolesEnabled={lobbyInfo?.neutralRolesEnabled ?? false}
                   phaseDurations={

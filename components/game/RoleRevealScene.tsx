@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { ROLES } from '@/models/roles';
+import { getRoleDisplayName, ROLES } from '@/models/roles';
 import type { Role } from '@/models/roles';
 
 type RoleRevealState =
@@ -25,6 +25,7 @@ export default function RoleRevealScene({
   roleToneClass,
   endGameButton,
 }: RoleRevealSceneProps) {
+  const roleDisplayName = getRoleDisplayName(roleName);
   const roleRevealSummary =
     roleName in ROLES
       ? ROLES[roleName as Role].revealSummary
@@ -60,7 +61,7 @@ export default function RoleRevealScene({
                   : 'reveal-role-placeholder opacity-0',
               ].join(' ')}
             >
-              {roleName}
+              {roleDisplayName}
             </h1>
             <p
               className={[

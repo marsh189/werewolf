@@ -36,12 +36,44 @@ export const escortVisit = (lobbyName: string, targetUserId: string) => {
   socket.emit('game:escortVisit', { lobbyName, targetUserId });
 };
 
-export const sentinelGuard = (lobbyName: string, targetUserId: string) => {
-  socket.emit('game:sentinelGuard', { lobbyName, targetUserId });
+export const bodyguardGuard = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:bodyguardGuard', { lobbyName, targetUserId });
 };
 
 export const doctorProtect = (lobbyName: string, targetUserId: string) => {
   socket.emit('game:doctorProtect', { lobbyName, targetUserId });
+};
+
+export const trackerWatch = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:trackerWatch', { lobbyName, targetUserId });
+};
+
+export const lookoutWatch = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:lookoutWatch', { lobbyName, targetUserId });
+};
+
+export const investigate = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:investigate', { lobbyName, targetUserId });
+};
+
+export const frame = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:frame', { lobbyName, targetUserId });
+};
+
+export const prowl = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:prowl', { lobbyName, targetUserId });
+};
+
+export const snatch = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:snatch', { lobbyName, targetUserId });
+};
+
+export const curse = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:curse', { lobbyName, targetUserId });
+};
+
+export const mimic = (lobbyName: string, targetUserId: string) => {
+  socket.emit('game:mimic', { lobbyName, targetUserId });
 };
 
 export const castVote = (lobbyName: string, targetUserId: string) => {

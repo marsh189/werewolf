@@ -34,24 +34,66 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     const executionerTargetName = executionerTargetUserId
       ? (lobby.members.get(executionerTargetUserId)?.name ?? 'Unknown Player')
       : null;
-    const werewolfUserIds =
-      myRole === 'Werewolf'
-        ? Array.from(lobby.playerRoles.entries())
-            .filter(([, role]) => role === 'Werewolf')
-            .map(([userId]) => userId)
-        : [];
+    const isWerewolfRole = (role) =>
+      role === 'Werewolf' ||
+      role === 'AlphaWolf' ||
+      role === 'Framer' ||
+      role === 'Prowler' ||
+      role === 'Cursed' ||
+      role === 'Snatcher' ||
+      role === 'Mimic';
+
+    const werewolfUserIds = isWerewolfRole(myRole)
+      ? Array.from(lobby.playerRoles.entries())
+          .filter(([, role]) => isWerewolfRole(role))
+          .map(([userId]) => userId)
+      : [];
     const escortVisitTargetUserId =
       myRole === 'Escort'
         ? (lobby.pendingEscortVisitTargets?.get(user.id) ?? null)
         : null;
-    const sentinelGuardTargetUserId =
-      myRole === 'Sentinel'
-        ? (lobby.pendingSentinelGuardTargets?.get(user.id) ?? null)
+    const bodyguardGuardTargetUserId =
+      myRole === 'Bodyguard'
+        ? (lobby.pendingBodyguardGuardTargets?.get(user.id) ?? null)
         : null;
     const doctorProtectTargetUserId =
       myRole === 'Doctor'
         ? (lobby.pendingDoctorProtectTargets?.get(user.id) ?? null)
         : null;
+    const trackerWatchTargetUserId =
+      myRole === 'Tracker'
+        ? (lobby.pendingTrackerWatchTargets?.get(user.id) ?? null)
+        : null;
+    const lookoutWatchTargetUserId =
+      myRole === 'Lookout'
+        ? (lobby.pendingLookoutWatchTargets?.get(user.id) ?? null)
+        : null;
+    const investigatorVisitTargetUserId =
+      myRole === 'Investigator'
+        ? (lobby.pendingInvestigatorVisitTargets?.get(user.id) ?? null)
+        : null;
+    const framerTargetUserId =
+      myRole === 'Framer' ? (lobby.pendingFramerTargets?.get(user.id) ?? null) : null;
+    const prowlerTargetUserId =
+      myRole === 'Prowler' ? (lobby.pendingProwlerTargets?.get(user.id) ?? null) : null;
+    const snatcherTargetUserId =
+      myRole === 'Snatcher'
+        ? (lobby.pendingSnatcherTargets?.get(user.id) ?? null)
+        : null;
+    const cursedTargetUserId =
+      myRole === 'Cursed' ? (lobby.pendingCursedTargets?.get(user.id) ?? null) : null;
+    const mimicTargetUserId =
+      myRole === 'Mimic'
+        ? (lobby.pendingMimicTargets?.get(user.id) ?? null)
+        : null;
+    const nightKillTargetUserId =
+      myRole === 'AlphaWolf'
+        ? (lobby.pendingAlphaWolfKillTargetId ?? null)
+        : myRole === 'Werewolf'
+          ? (lobby.pendingWerewolfKillTargetId ?? null)
+          : myRole === 'Hunter'
+            ? (lobby.pendingHunterKillTargets?.get(user.id) ?? null)
+            : null;
 
     return ack({
       ok: true,
@@ -71,9 +113,19 @@ export const registerGameHandlers = ({ io, socket, user }) => {
           myRole === 'Trapper'
             ? (lobby.pendingTrapperAlertUserIds?.has(user.id) ?? false)
             : false,
+        nightKillTargetUserId,
         escortVisitTargetUserId,
-        sentinelGuardTargetUserId,
+        bodyguardGuardTargetUserId,
         doctorProtectTargetUserId,
+        doctorSelfProtectUsed: myRole === 'Doctor' ? (myRoleState.doctorSelfProtectUsed ?? false) : null,
+        trackerWatchTargetUserId,
+        lookoutWatchTargetUserId,
+        investigatorVisitTargetUserId,
+        framerTargetUserId,
+        prowlerTargetUserId,
+        snatcherTargetUserId,
+        cursedTargetUserId,
+        mimicTargetUserId,
         executionerTargetUserId,
         executionerTargetName,
         hostUserId: lobby.hostUserId,
@@ -123,8 +175,11 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       return ack({ ok: false, error: 'Dead players cannot act' });
     }
     const myRole = lobby.playerRoles.get(user.id);
-    if (myRole !== 'Werewolf' && myRole !== 'Hunter') {
+    if (myRole !== 'Werewolf' && myRole !== 'AlphaWolf' && myRole !== 'Hunter') {
       return ack({ ok: false, error: 'Your role cannot perform a night kill' });
+    }
+    if (myRole === 'AlphaWolf' && targetUserId === user.id) {
+      return ack({ ok: false, error: 'Alpha Wolf cannot target themselves' });
     }
     if (myRole === 'Hunter' && targetUserId === user.id) {
       return ack({ ok: false, error: 'Hunter cannot target themselves' });
@@ -136,7 +191,12 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       return ack({ ok: true, throttled: true });
     }
 
-    if (myRole === 'Werewolf') {
+    if (myRole === 'AlphaWolf') {
+      if (lobby.pendingAlphaWolfKillTargetId === targetUserId) {
+        return ack({ ok: true, unchanged: true });
+      }
+      lobby.pendingAlphaWolfKillTargetId = targetUserId;
+    } else if (myRole === 'Werewolf') {
       if (lobby.pendingWerewolfKillTargetId === targetUserId) {
         return ack({ ok: true, unchanged: true });
       }
@@ -155,6 +215,195 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       }
       lobby.pendingHunterKillTargets.set(user.id, targetUserId);
     }
+    emitLobbyUpdate(io, lobby);
+    return ack({ ok: true });
+  });
+
+  socket.on('game:frame', (data, callback) => {
+    const { ack, lobby } = requireAckAndLobby(data, callback);
+    if (!lobby) return;
+    if (!requireLobbyMembership(lobby, user.id, ack)) return;
+
+    const targetUserId = requireTargetUserId(data, ack);
+    if (!targetUserId) return;
+
+    if (lobby.gamePhase !== 'night') {
+      return ack({ ok: false, error: 'Not in night phase' });
+    }
+    if (lobby.eliminatedUserIds?.has(user.id)) {
+      return ack({ ok: false, error: 'Dead players cannot act' });
+    }
+    const myRole = lobby.playerRoles.get(user.id);
+    if (myRole !== 'Framer') {
+      return ack({ ok: false, error: 'Only Framer can frame' });
+    }
+    if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
+      return ack({ ok: false, error: 'Target must be alive and in lobby' });
+    }
+    if (isRapidAction(lobby, user.id, 'frame')) {
+      return ack({ ok: true, throttled: true });
+    }
+
+    if (!lobby.pendingFramerTargets) {
+      lobby.pendingFramerTargets = new Map();
+    }
+    if (lobby.pendingFramerTargets.get(user.id) === targetUserId) {
+      return ack({ ok: true, unchanged: true });
+    }
+    lobby.pendingFramerTargets.set(user.id, targetUserId);
+    emitLobbyUpdate(io, lobby);
+    return ack({ ok: true });
+  });
+
+  socket.on('game:prowl', (data, callback) => {
+    const { ack, lobby } = requireAckAndLobby(data, callback);
+    if (!lobby) return;
+    if (!requireLobbyMembership(lobby, user.id, ack)) return;
+
+    const targetUserId = requireTargetUserId(data, ack);
+    if (!targetUserId) return;
+
+    if (lobby.gamePhase !== 'night') {
+      return ack({ ok: false, error: 'Not in night phase' });
+    }
+    if (lobby.eliminatedUserIds?.has(user.id)) {
+      return ack({ ok: false, error: 'Dead players cannot act' });
+    }
+    const myRole = lobby.playerRoles.get(user.id);
+    if (myRole !== 'Prowler') {
+      return ack({ ok: false, error: 'Only Prowler can prowl' });
+    }
+    if (targetUserId === user.id) {
+      return ack({ ok: false, error: 'Prowler cannot target themselves' });
+    }
+    if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
+      return ack({ ok: false, error: 'Target must be alive and in lobby' });
+    }
+    if (isRapidAction(lobby, user.id, 'prowl')) {
+      return ack({ ok: true, throttled: true });
+    }
+
+    if (!lobby.pendingProwlerTargets) {
+      lobby.pendingProwlerTargets = new Map();
+    }
+    if (lobby.pendingProwlerTargets.get(user.id) === targetUserId) {
+      return ack({ ok: true, unchanged: true });
+    }
+    lobby.pendingProwlerTargets.set(user.id, targetUserId);
+    emitLobbyUpdate(io, lobby);
+    return ack({ ok: true });
+  });
+
+  socket.on('game:snatch', (data, callback) => {
+    const { ack, lobby } = requireAckAndLobby(data, callback);
+    if (!lobby) return;
+    if (!requireLobbyMembership(lobby, user.id, ack)) return;
+
+    const targetUserId = requireTargetUserId(data, ack);
+    if (!targetUserId) return;
+
+    if (lobby.gamePhase !== 'night') {
+      return ack({ ok: false, error: 'Not in night phase' });
+    }
+    if (lobby.eliminatedUserIds?.has(user.id)) {
+      return ack({ ok: false, error: 'Dead players cannot act' });
+    }
+    const myRole = lobby.playerRoles.get(user.id);
+    if (myRole !== 'Snatcher') {
+      return ack({ ok: false, error: 'Only Snatcher can snatch' });
+    }
+    if (targetUserId === user.id) {
+      return ack({ ok: false, error: 'Snatcher cannot target themselves' });
+    }
+    if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
+      return ack({ ok: false, error: 'Target must be alive and in lobby' });
+    }
+    if (isRapidAction(lobby, user.id, 'snatch')) {
+      return ack({ ok: true, throttled: true });
+    }
+
+    if (!lobby.pendingSnatcherTargets) {
+      lobby.pendingSnatcherTargets = new Map();
+    }
+    if (lobby.pendingSnatcherTargets.get(user.id) === targetUserId) {
+      return ack({ ok: true, unchanged: true });
+    }
+    lobby.pendingSnatcherTargets.set(user.id, targetUserId);
+    emitLobbyUpdate(io, lobby);
+    return ack({ ok: true });
+  });
+
+  socket.on('game:curse', (data, callback) => {
+    const { ack, lobby } = requireAckAndLobby(data, callback);
+    if (!lobby) return;
+    if (!requireLobbyMembership(lobby, user.id, ack)) return;
+
+    const targetUserId = requireTargetUserId(data, ack);
+    if (!targetUserId) return;
+
+    if (lobby.gamePhase !== 'night') {
+      return ack({ ok: false, error: 'Not in night phase' });
+    }
+    if (lobby.eliminatedUserIds?.has(user.id)) {
+      return ack({ ok: false, error: 'Dead players cannot act' });
+    }
+    const myRole = lobby.playerRoles.get(user.id);
+    if (myRole !== 'Cursed') {
+      return ack({ ok: false, error: 'Only Cursed can curse' });
+    }
+    if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
+      return ack({ ok: false, error: 'Target must be alive and in lobby' });
+    }
+    if (isRapidAction(lobby, user.id, 'curse')) {
+      return ack({ ok: true, throttled: true });
+    }
+
+    if (!lobby.pendingCursedTargets) {
+      lobby.pendingCursedTargets = new Map();
+    }
+    if (lobby.pendingCursedTargets.get(user.id) === targetUserId) {
+      return ack({ ok: true, unchanged: true });
+    }
+    lobby.pendingCursedTargets.set(user.id, targetUserId);
+    emitLobbyUpdate(io, lobby);
+    return ack({ ok: true });
+  });
+
+  socket.on('game:mimic', (data, callback) => {
+    const { ack, lobby } = requireAckAndLobby(data, callback);
+    if (!lobby) return;
+    if (!requireLobbyMembership(lobby, user.id, ack)) return;
+
+    const targetUserId = requireTargetUserId(data, ack);
+    if (!targetUserId) return;
+
+    if (lobby.gamePhase !== 'night') {
+      return ack({ ok: false, error: 'Not in night phase' });
+    }
+    if (lobby.eliminatedUserIds?.has(user.id)) {
+      return ack({ ok: false, error: 'Dead players cannot act' });
+    }
+    const myRole = lobby.playerRoles.get(user.id);
+    if (myRole !== 'Mimic') {
+      return ack({ ok: false, error: 'Only Mimic can copy roles' });
+    }
+    if (targetUserId === user.id) {
+      return ack({ ok: false, error: 'Mimic cannot target themselves' });
+    }
+    if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
+      return ack({ ok: false, error: 'Target must be alive and in lobby' });
+    }
+    if (isRapidAction(lobby, user.id, 'mimic')) {
+      return ack({ ok: true, throttled: true });
+    }
+
+    if (!lobby.pendingMimicTargets) {
+      lobby.pendingMimicTargets = new Map();
+    }
+    if (lobby.pendingMimicTargets.get(user.id) === targetUserId) {
+      return ack({ ok: true, unchanged: true });
+    }
+    lobby.pendingMimicTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
     return ack({ ok: true });
   });
@@ -198,7 +447,7 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     return ack({ ok: true });
   });
 
-  socket.on('game:sentinelGuard', (data, callback) => {
+  socket.on('game:bodyguardGuard', (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
     if (!requireLobbyMembership(lobby, user.id, ack)) return;
@@ -213,26 +462,26 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       return ack({ ok: false, error: 'Dead players cannot act' });
     }
     const myRole = lobby.playerRoles.get(user.id);
-    if (myRole !== 'Sentinel') {
-      return ack({ ok: false, error: 'Only Sentinel can guard' });
+    if (myRole !== 'Bodyguard') {
+      return ack({ ok: false, error: 'Only Bodyguard can guard' });
     }
     if (targetUserId === user.id) {
-      return ack({ ok: false, error: 'Sentinel cannot target themselves' });
+      return ack({ ok: false, error: 'Bodyguard cannot target themselves' });
     }
     if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
       return ack({ ok: false, error: 'Target must be alive and in lobby' });
     }
-    if (isRapidAction(lobby, user.id, 'sentinelGuard')) {
+    if (isRapidAction(lobby, user.id, 'bodyguardGuard')) {
       return ack({ ok: true, throttled: true });
     }
 
-    if (!lobby.pendingSentinelGuardTargets) {
-      lobby.pendingSentinelGuardTargets = new Map();
+    if (!lobby.pendingBodyguardGuardTargets) {
+      lobby.pendingBodyguardGuardTargets = new Map();
     }
-    if (lobby.pendingSentinelGuardTargets.get(user.id) === targetUserId) {
+    if (lobby.pendingBodyguardGuardTargets.get(user.id) === targetUserId) {
       return ack({ ok: true, unchanged: true });
     }
-    lobby.pendingSentinelGuardTargets.set(user.id, targetUserId);
+    lobby.pendingBodyguardGuardTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
     return ack({ ok: true });
   });
@@ -261,6 +510,12 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     if (isRapidAction(lobby, user.id, 'doctorProtect')) {
       return ack({ ok: true, throttled: true });
     }
+    if (targetUserId === user.id) {
+      const myRoleState = lobby.playerRoleState?.get(user.id) ?? {};
+      if (myRoleState.doctorSelfProtectUsed === true) {
+        return ack({ ok: false, error: 'Doctor can only self-protect once per game' });
+      }
+    }
 
     if (!lobby.pendingDoctorProtectTargets) {
       lobby.pendingDoctorProtectTargets = new Map();
@@ -269,6 +524,120 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       return ack({ ok: true, unchanged: true });
     }
     lobby.pendingDoctorProtectTargets.set(user.id, targetUserId);
+    emitLobbyUpdate(io, lobby);
+    return ack({ ok: true });
+  });
+
+  socket.on('game:trackerWatch', (data, callback) => {
+    const { ack, lobby } = requireAckAndLobby(data, callback);
+    if (!lobby) return;
+    if (!requireLobbyMembership(lobby, user.id, ack)) return;
+
+    const targetUserId = requireTargetUserId(data, ack);
+    if (!targetUserId) return;
+
+    if (lobby.gamePhase !== 'night') {
+      return ack({ ok: false, error: 'Not in night phase' });
+    }
+    if (lobby.eliminatedUserIds?.has(user.id)) {
+      return ack({ ok: false, error: 'Dead players cannot act' });
+    }
+    const myRole = lobby.playerRoles.get(user.id);
+    if (myRole !== 'Tracker') {
+      return ack({ ok: false, error: 'Only Tracker can track' });
+    }
+    if (targetUserId === user.id) {
+      return ack({ ok: false, error: 'Tracker cannot target themselves' });
+    }
+    if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
+      return ack({ ok: false, error: 'Target must be alive and in lobby' });
+    }
+    if (isRapidAction(lobby, user.id, 'trackerWatch')) {
+      return ack({ ok: true, throttled: true });
+    }
+
+    if (!lobby.pendingTrackerWatchTargets) {
+      lobby.pendingTrackerWatchTargets = new Map();
+    }
+    if (lobby.pendingTrackerWatchTargets.get(user.id) === targetUserId) {
+      return ack({ ok: true, unchanged: true });
+    }
+    lobby.pendingTrackerWatchTargets.set(user.id, targetUserId);
+    emitLobbyUpdate(io, lobby);
+    return ack({ ok: true });
+  });
+
+  socket.on('game:lookoutWatch', (data, callback) => {
+    const { ack, lobby } = requireAckAndLobby(data, callback);
+    if (!lobby) return;
+    if (!requireLobbyMembership(lobby, user.id, ack)) return;
+
+    const targetUserId = requireTargetUserId(data, ack);
+    if (!targetUserId) return;
+
+    if (lobby.gamePhase !== 'night') {
+      return ack({ ok: false, error: 'Not in night phase' });
+    }
+    if (lobby.eliminatedUserIds?.has(user.id)) {
+      return ack({ ok: false, error: 'Dead players cannot act' });
+    }
+    const myRole = lobby.playerRoles.get(user.id);
+    if (myRole !== 'Lookout') {
+      return ack({ ok: false, error: 'Only Lookout can watch' });
+    }
+    if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
+      return ack({ ok: false, error: 'Target must be alive and in lobby' });
+    }
+    if (isRapidAction(lobby, user.id, 'lookoutWatch')) {
+      return ack({ ok: true, throttled: true });
+    }
+
+    if (!lobby.pendingLookoutWatchTargets) {
+      lobby.pendingLookoutWatchTargets = new Map();
+    }
+    if (lobby.pendingLookoutWatchTargets.get(user.id) === targetUserId) {
+      return ack({ ok: true, unchanged: true });
+    }
+    lobby.pendingLookoutWatchTargets.set(user.id, targetUserId);
+    emitLobbyUpdate(io, lobby);
+    return ack({ ok: true });
+  });
+
+  socket.on('game:investigate', (data, callback) => {
+    const { ack, lobby } = requireAckAndLobby(data, callback);
+    if (!lobby) return;
+    if (!requireLobbyMembership(lobby, user.id, ack)) return;
+
+    const targetUserId = requireTargetUserId(data, ack);
+    if (!targetUserId) return;
+
+    if (lobby.gamePhase !== 'night') {
+      return ack({ ok: false, error: 'Not in night phase' });
+    }
+    if (lobby.eliminatedUserIds?.has(user.id)) {
+      return ack({ ok: false, error: 'Dead players cannot act' });
+    }
+    const myRole = lobby.playerRoles.get(user.id);
+    if (myRole !== 'Investigator') {
+      return ack({ ok: false, error: 'Only Investigator can investigate' });
+    }
+    if (targetUserId === user.id) {
+      return ack({ ok: false, error: 'Investigator cannot target themselves' });
+    }
+    if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
+      return ack({ ok: false, error: 'Target must be alive and in lobby' });
+    }
+    if (isRapidAction(lobby, user.id, 'investigate')) {
+      return ack({ ok: true, throttled: true });
+    }
+
+    if (!lobby.pendingInvestigatorVisitTargets) {
+      lobby.pendingInvestigatorVisitTargets = new Map();
+    }
+    if (lobby.pendingInvestigatorVisitTargets.get(user.id) === targetUserId) {
+      return ack({ ok: true, unchanged: true });
+    }
+    lobby.pendingInvestigatorVisitTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
     return ack({ ok: true });
   });

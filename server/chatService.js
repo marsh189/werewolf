@@ -54,7 +54,14 @@ export const sanitizeChatContent = (value) => {
 const isAlive = (lobby, userId) => !lobby.eliminatedUserIds?.has(userId);
 
 const isAliveWerewolf = (lobby, userId) =>
-  isAlive(lobby, userId) && lobby.playerRoles?.get(userId) === 'Werewolf';
+  isAlive(lobby, userId) &&
+  (lobby.playerRoles?.get(userId) === 'Werewolf' ||
+    lobby.playerRoles?.get(userId) === 'AlphaWolf' ||
+    lobby.playerRoles?.get(userId) === 'Framer' ||
+    lobby.playerRoles?.get(userId) === 'Prowler' ||
+    lobby.playerRoles?.get(userId) === 'Cursed' ||
+    lobby.playerRoles?.get(userId) === 'Snatcher' ||
+    lobby.playerRoles?.get(userId) === 'Mimic');
 
 const getChatAudienceForUser = (lobby, userId) => {
   if (!lobby.members.has(userId) || lobby.started !== true) return null;

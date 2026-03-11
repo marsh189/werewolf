@@ -27,8 +27,8 @@ export const parseTargetUserId = (data) => {
   return targetUserId || null;
 };
 
-export const sanitizeWerewolfCount = (input) =>
-  Math.max(1, Number(input) || 1);
+export const sanitizeWerewolfCount = (input, min = 1) =>
+  Math.max(min, Number(input) || min);
 
 export const sanitizeSpecialRolesEnabled = (input) => input === true;
 

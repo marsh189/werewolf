@@ -1,8 +1,24 @@
+export type NightInstructionContext = {
+  hunterShotsRemaining?: number;
+  trapperAlertsRemaining?: number;
+  trapperAlertActive?: boolean;
+};
+
+export type NightInstruction =
+  | string
+  | ((context: NightInstructionContext) => string);
+
+export const getRoleDisplayName = (roleName: string) => {
+  if (roleName === 'AlphaWolf') return 'Alpha Wolf';
+  return roleName;
+};
+
 export const ROLES = {
   Villager: {
     faction: 'Village',
     category: 'Basic',
     ability: 'No night action. Use discussion and voting to find enemies.',
+    nightInstruction: 'You have no night action tonight.',
     winCondition: 'Village wins when all werewolves are eliminated.',
     revealSummary: 'A steady voice in the dark. Read the room, sway the vote, and expose the pack.',
   },
@@ -10,13 +26,75 @@ export const ROLES = {
     faction: 'Enemy',
     category: 'Killing',
     ability: 'Coordinate at night and choose a player to eliminate.',
+    nightInstruction:
+      'Choose a player to kill. Coordinate with other werewolves in secret chat.',
     winCondition: 'Enemy team wins when werewolves reach parity with Village.',
     revealSummary: 'Hide behind a friendly face by day, then hunt as one beneath the moon.',
+  },
+  AlphaWolf: {
+    faction: 'Enemy',
+    category: 'Killing',
+    ability: 'Choose the werewolves’ kill target each night.',
+    nightInstruction:
+      'Choose the werewolves’ kill target tonight. Coordinate with other werewolves in secret chat.',
+    winCondition: 'Enemy team wins when werewolves reach parity with Village.',
+    revealSummary: 'You lead the hunt. Every night, your choice shapes who sees dawn.',
+  },
+  Framer: {
+    faction: 'Enemy',
+    category: 'Information',
+    ability:
+      'Frame one player at night. Investigative results on them may appear suspicious.',
+    nightInstruction:
+      'Choose a player to frame. Some investigative results on them may appear suspicious tonight.',
+    winCondition: 'Enemy team wins when werewolves reach parity with Village.',
+    revealSummary: 'Plant false clues and turn honest eyes toward the innocent.',
+  },
+  Prowler: {
+    faction: 'Enemy',
+    category: 'Information',
+    ability: 'Prowl one player at night for clues on their role.',
+    nightInstruction:
+      'Choose a player to prowl. You will receive a list of possible roles.',
+    winCondition: 'Enemy team wins when werewolves reach parity with Village.',
+    revealSummary: 'Quiet reconnaissance wins wars before the claws come out.',
+  },
+  Snatcher: {
+    faction: 'Enemy',
+    category: 'Control',
+    ability: 'Snatch one player at night to roleblock them.',
+    nightInstruction:
+      'Choose a player to snatch. Their night action (if any) will fail.',
+    winCondition: 'Enemy team wins when werewolves reach parity with Village.',
+    revealSummary: 'Drag key players off the board and watch plans unravel.',
+  },
+  Cursed: {
+    faction: 'Enemy',
+    category: 'Control',
+    ability:
+      'Curse one player at night. Cursed players cannot be protected by a Doctor that night.',
+    nightInstruction:
+      'Choose a player to curse. If a Doctor protects them tonight, the protection fails.',
+    winCondition: 'Enemy team wins when werewolves reach parity with Village.',
+    revealSummary: 'A whisper of ruin that turns safety into false hope.',
+  },
+  Mimic: {
+    faction: 'Enemy',
+    category: 'Information',
+    ability:
+      'Choose a player at night to mimic their role in village investigative checks.',
+    nightInstruction:
+      'Choose a player to mimic. Village investigative checks may see you as their role.',
+    winCondition: 'Enemy team wins when werewolves reach parity with Village.',
+    revealSummary: 'Borrow a mask for the night and let suspicion land elsewhere.',
   },
   Doctor: {
     faction: 'Village',
     category: 'Support',
-    ability: 'Choose a player at night to protect from a kill.',
+    ability:
+      'Choose a player at night to protect from a kill. You may protect yourself once per game.',
+    nightInstruction:
+      'Choose a player to protect from a kill tonight. You may protect yourself once per game.',
     winCondition: 'Village wins when all werewolves are eliminated.',
     revealSummary: 'Keep hearts beating through the longest nights. Your protection can change everything.',
   },
@@ -24,6 +102,7 @@ export const ROLES = {
     faction: 'Village',
     category: 'Information',
     ability: 'Choose a player at night to learn who they visited.',
+    nightInstruction: 'Choose a player to track. You will learn who they visited.',
     winCondition: 'Village wins when all werewolves are eliminated.',
     revealSummary: 'Follow footprints in the dark and uncover who moves when no one should.',
   },
@@ -31,6 +110,7 @@ export const ROLES = {
     faction: 'Village',
     category: 'Information',
     ability: 'Choose a player at night to see who visited them.',
+    nightInstruction: 'Choose a player to watch. You will learn who visited them.',
     winCondition: 'Village wins when all werewolves are eliminated.',
     revealSummary: 'Watch the doors no one else watches. Witnesses decide who survives dawn.',
   },
@@ -38,6 +118,8 @@ export const ROLES = {
     faction: 'Village',
     category: 'Information',
     ability: 'Investigate one player at night for clues on their role.',
+    nightInstruction:
+      'Choose a player to investigate. You will receive a list of possible roles.',
     winCondition: 'Village wins when all werewolves are eliminated.',
     revealSummary: 'Piece together subtle tells and quiet lies to reveal the truth beneath the masks.',
   },
@@ -45,6 +127,10 @@ export const ROLES = {
     faction: 'Village',
     category: 'Killing',
     ability: 'At night, choose a player to shoot (up to 3 shots total). If you kill a Village role, you die from guilt.',
+    nightInstruction: ({ hunterShotsRemaining }: NightInstructionContext) =>
+      (hunterShotsRemaining ?? 0) > 0
+        ? `Choose a player to shoot. Shots remaining: ${hunterShotsRemaining ?? 0}.`
+        : 'You have no shots remaining tonight.',
     winCondition: 'Village wins when all werewolves are eliminated.',
     revealSummary: 'Justice rides with your rifle. Every shot matters, and every mistake has a price.',
   },
@@ -52,6 +138,15 @@ export const ROLES = {
     faction: 'Village',
     category: 'Control',
     ability: 'At night, you may activate alert (up to 3 uses). Attackers who target you during alert are killed.',
+    nightInstruction: ({
+      trapperAlertsRemaining,
+      trapperAlertActive,
+    }: NightInstructionContext) =>
+      trapperAlertActive
+        ? 'Alert is active tonight.'
+        : (trapperAlertsRemaining ?? 0) > 0
+          ? `Use "Activate Alert" to set a trap on yourself tonight. Alerts remaining: ${trapperAlertsRemaining ?? 0}.`
+          : 'You have no alerts remaining tonight.',
     winCondition: 'Village wins when all werewolves are eliminated.',
     revealSummary: 'Set yourself as bait and spring the trap. Predators who strike carelessly may not return.',
   },
@@ -59,13 +154,16 @@ export const ROLES = {
     faction: 'Village',
     category: 'Control',
     ability: 'Roleblock one player at night so their action fails.',
+    nightInstruction: 'Choose a player to roleblock so their night action fails.',
     winCondition: 'Village wins when all werewolves are eliminated.',
     revealSummary: 'Keep dangerous players occupied and throw enemy plans into disarray.',
   },
-  Sentinel: {
+  Bodyguard: {
     faction: 'Village',
     category: 'Support',
     ability: 'Guard a player and intercept a hostile attack.',
+    nightInstruction:
+      'Choose a player to guard. You will intercept a hostile attack aimed at them.',
     winCondition: 'Village wins when all werewolves are eliminated.',
     revealSummary: 'Stand between claw and kin. Your watch may be the wall that holds the village together.',
   },
@@ -73,6 +171,8 @@ export const ROLES = {
     faction: 'Neutral',
     category: 'Objective',
     ability: 'Cause chaos and attract suspicion.',
+    nightInstruction:
+      'You have no night action. Try to get yourself executed during the day.',
     winCondition: 'Win by being executed by daytime vote.',
     revealSummary: 'Twist the town against you until they hand you victory at the gallows.',
   },
@@ -80,6 +180,7 @@ export const ROLES = {
     faction: 'Neutral',
     category: 'Objective',
     ability: 'Has a specific target to push for execution. If that target dies at night, you become a Jester.',
+    nightInstruction: 'You have no night action. Push your target during the day vote.',
     winCondition: 'Win if your assigned target is executed by vote.',
     revealSummary: 'Guide one chosen soul toward the noose; if fate steals them first, embrace chaos as Jester.',
   },

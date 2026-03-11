@@ -132,10 +132,22 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
       neutralRolesEnabled,
       phaseDurations,
     } = data ?? {};
-    lobby.werewolfCount = sanitizeWerewolfCount(werewolfCount);
+
+    const nextSpecialRolesEnabled =
+      typeof specialRolesEnabled === 'boolean'
+        ? sanitizeSpecialRolesEnabled(specialRolesEnabled)
+        : lobby.specialRolesEnabled === true;
+
     if (typeof specialRolesEnabled === 'boolean') {
-      lobby.specialRolesEnabled = sanitizeSpecialRolesEnabled(specialRolesEnabled);
+      lobby.specialRolesEnabled = nextSpecialRolesEnabled;
     }
+
+    const minWerewolves = nextSpecialRolesEnabled ? 2 : 1;
+    lobby.werewolfCount = sanitizeWerewolfCount(
+      werewolfCount ?? lobby.werewolfCount,
+      minWerewolves,
+    );
+
     if (typeof neutralRolesEnabled === 'boolean') {
       lobby.neutralRolesEnabled = sanitizeNeutralRolesEnabled(neutralRolesEnabled);
     }

@@ -33,11 +33,20 @@ const clearRoundState = (lobby) => {
   lobby.pendingNightDeathReveals = [];
   lobby.pendingWerewolfKillTargetId = null;
   lobby.pendingWerewolfKillActorUserId = null;
+  lobby.pendingAlphaWolfKillTargetId = null;
   lobby.pendingHunterKillTargets = new Map();
   lobby.pendingTrapperAlertUserIds = new Set();
   lobby.pendingEscortVisitTargets = new Map();
-  lobby.pendingSentinelGuardTargets = new Map();
+  lobby.pendingBodyguardGuardTargets = new Map();
   lobby.pendingDoctorProtectTargets = new Map();
+  lobby.pendingTrackerWatchTargets = new Map();
+  lobby.pendingLookoutWatchTargets = new Map();
+  lobby.pendingInvestigatorVisitTargets = new Map();
+  lobby.pendingFramerTargets = new Map();
+  lobby.pendingProwlerTargets = new Map();
+  lobby.pendingSnatcherTargets = new Map();
+  lobby.pendingCursedTargets = new Map();
+  lobby.pendingMimicTargets = new Map();
   lobby.currentVotes = new Map();
   lobby.actionTimestamps = new Map();
   lobby.currentEliminationResult = null;
@@ -54,6 +63,7 @@ const clearPlayerGameData = (lobby) => {
 const createInitialRoleState = (role) => ({
   hunterShotsRemaining: role === 'Hunter' ? 3 : 0,
   trapperAlertsRemaining: role === 'Trapper' ? 3 : 0,
+  doctorSelfProtectUsed: false,
   executionerTargetUserId: null,
 });
 
@@ -182,7 +192,16 @@ const VILLAGE_SPECIAL_ROLES = [
   'Hunter',
   'Trapper',
   'Escort',
-  'Sentinel',
+  'Bodyguard',
+];
+
+const WEREWOLF_SPECIAL_ROLES = [
+  'AlphaWolf',
+  'Framer',
+  'Prowler',
+  'Cursed',
+  'Snatcher',
+  'Mimic',
 ];
 
 const NEUTRAL_SPECIAL_ROLES = [
@@ -198,7 +217,7 @@ const VILLAGE_ROLE_CATEGORY_BY_ROLE = {
   Hunter: 'Killing',
   Trapper: 'Control',
   Escort: 'Control',
-  Sentinel: 'Support',
+  Bodyguard: 'Support',
 };
 
 const pickRandomItems = (items, count) => shuffle(items).slice(0, count);
@@ -319,8 +338,22 @@ const buildRoleDeck = (
   const specialRoles = shuffle([...selectedVillageRoles, ...selectedNeutralRoles]);
   const villagerCount = memberCount - safeWerewolfCount - specialRoles.length;
 
+  const werewolfRoles = specialRolesEnabled
+    ? (() => {
+        const pickedSpecials = pickRandomItems(
+          WEREWOLF_SPECIAL_ROLES.filter((role) => role !== 'AlphaWolf'),
+          Math.max(0, safeWerewolfCount - 1),
+        );
+        const roles = ['AlphaWolf', ...pickedSpecials];
+        while (roles.length < safeWerewolfCount) {
+          roles.push('Werewolf');
+        }
+        return roles.slice(0, safeWerewolfCount);
+      })()
+    : Array.from({ length: safeWerewolfCount }, () => 'Werewolf');
+
   return [
-    ...Array.from({ length: safeWerewolfCount }, () => 'Werewolf'),
+    ...werewolfRoles,
     ...specialRoles,
     ...Array.from({ length: villagerCount }, () => 'Villager'),
   ];
@@ -359,6 +392,12 @@ export const assignRolesToLobby = (lobby) => {
         ([targetUserId, targetRole]) =>
           targetUserId !== executionerUserId &&
           targetRole !== 'Werewolf' &&
+          targetRole !== 'AlphaWolf' &&
+          targetRole !== 'Framer' &&
+          targetRole !== 'Prowler' &&
+          targetRole !== 'Cursed' &&
+          targetRole !== 'Snatcher' &&
+          targetRole !== 'Mimic' &&
           targetRole !== 'Executioner' &&
           targetRole !== 'Jester',
       )
@@ -418,41 +457,120 @@ const schedulePhaseTransition = (io, lobby, durationMs, onComplete) => {
 };
 
 const isVillageRole = (role) =>
-  role !== 'Werewolf' && role !== 'Jester' && role !== 'Executioner';
+  role !== 'Werewolf' &&
+  role !== 'AlphaWolf' &&
+  role !== 'Framer' &&
+  role !== 'Prowler' &&
+  role !== 'Cursed' &&
+  role !== 'Snatcher' &&
+  role !== 'Mimic' &&
+  role !== 'Jester' &&
+  role !== 'Executioner';
 
 const getAliveWerewolfIds = (lobby, aliveAtNightStart) =>
   Array.from(lobby.playerRoles.entries())
     .filter(
       ([userId, role]) =>
-        role === 'Werewolf' &&
+        (role === 'Werewolf' ||
+          role === 'AlphaWolf' ||
+          role === 'Framer' ||
+          role === 'Prowler' ||
+          role === 'Cursed' ||
+          role === 'Snatcher' ||
+          role === 'Mimic') &&
         aliveAtNightStart.has(userId) &&
         !lobby.eliminatedUserIds.has(userId),
     )
     .map(([userId]) => userId);
 
+const isWerewolfRole = (role) =>
+  role === 'Werewolf' ||
+  role === 'AlphaWolf' ||
+  role === 'Framer' ||
+  role === 'Prowler' ||
+  role === 'Cursed' ||
+  role === 'Snatcher' ||
+  role === 'Mimic';
+
 const hasNightAction = (role) =>
   role === 'Doctor' ||
   role === 'Werewolf' ||
+  role === 'AlphaWolf' ||
   role === 'Hunter' ||
   role === 'Trapper' ||
   role === 'Escort' ||
-  role === 'Sentinel';
+  role === 'Bodyguard' ||
+  role === 'Tracker' ||
+  role === 'Lookout' ||
+  role === 'Investigator' ||
+  role === 'Framer' ||
+  role === 'Prowler' ||
+  role === 'Cursed' ||
+  role === 'Snatcher' ||
+  role === 'Mimic';
 
-const findSentinelGuardForTarget = (
+const formatNameList = (names) => {
+  const cleaned = (Array.isArray(names) ? names : []).filter(Boolean);
+  if (cleaned.length === 0) return '';
+  if (cleaned.length === 1) return cleaned[0];
+  if (cleaned.length === 2) return `${cleaned[0]} and ${cleaned[1]}`;
+  return `${cleaned.slice(0, -1).join(', ')}, and ${cleaned[cleaned.length - 1]}`;
+};
+
+const getRoleDisplayName = (roleName) => {
+  if (roleName === 'AlphaWolf') return 'Alpha Wolf';
+  return roleName;
+};
+
+const articleFor = (word) => (/^[aeiou]/i.test(String(word ?? '').trim()) ? 'an' : 'a');
+
+const formatChoiceList = (items) => {
+  const cleaned = (Array.isArray(items) ? items : []).filter(Boolean);
+  if (cleaned.length === 0) return '';
+  if (cleaned.length === 1) return cleaned[0];
+  if (cleaned.length === 2) return `${cleaned[0]} or ${cleaned[1]}`;
+  return `${cleaned.slice(0, -1).join(', ')}, or ${cleaned[cleaned.length - 1]}`;
+};
+
+const INVESTIGATOR_RESULTS_BY_ROLE = {
+  Villager: ['Villager', 'Doctor', 'Bodyguard'],
+  Doctor: ['Villager', 'Doctor', 'Bodyguard'],
+  Bodyguard: ['Villager', 'Doctor', 'Bodyguard'],
+
+  Investigator: ['Investigator', 'Tracker', 'Lookout'],
+  Tracker: ['Investigator', 'Tracker', 'Lookout'],
+  Lookout: ['Investigator', 'Tracker', 'Lookout'],
+
+  Escort: ['Escort', 'Trapper', 'Jester'],
+  Trapper: ['Escort', 'Trapper', 'Jester'],
+  Jester: ['Escort', 'Trapper', 'Jester'],
+
+  Werewolf: ['Hunter', 'Executioner', 'Werewolf'],
+  AlphaWolf: ['Hunter', 'Executioner', 'Werewolf'],
+  Framer: ['Hunter', 'Executioner', 'Werewolf'],
+  Prowler: ['Hunter', 'Executioner', 'Werewolf'],
+  Cursed: ['Hunter', 'Executioner', 'Werewolf'],
+  Snatcher: ['Hunter', 'Executioner', 'Werewolf'],
+  Mimic: ['Hunter', 'Executioner', 'Werewolf'],
+  Executioner: ['Hunter', 'Executioner', 'Werewolf'],
+  Hunter: ['Hunter', 'Executioner', 'Werewolf'],
+};
+
+const findBodyguardGuardForTarget = (
   lobby,
   targetUserId,
   aliveAtNightStart,
   blockedByEscort,
 ) => {
-  for (const [sentinelUserId, guardedUserId] of (
-    lobby.pendingSentinelGuardTargets?.entries() ?? []
+  for (const [bodyguardUserId, guardedUserId] of (
+    lobby.pendingBodyguardGuardTargets?.entries() ?? []
   )) {
     if (guardedUserId !== targetUserId) continue;
-    if (!aliveAtNightStart.has(sentinelUserId)) continue;
+    if (!aliveAtNightStart.has(bodyguardUserId)) continue;
     if (!aliveAtNightStart.has(guardedUserId)) continue;
-    if (blockedByEscort.has(sentinelUserId)) continue;
-    if (lobby.playerRoles.get(sentinelUserId) !== 'Sentinel') continue;
-    return sentinelUserId;
+    if (blockedByEscort.has(bodyguardUserId)) continue;
+    if (lobby.playerRoles.get(bodyguardUserId) !== 'Bodyguard') continue;
+    return bodyguardUserId;
   }
   return null;
 };
@@ -466,6 +584,14 @@ const getDoctorProtectedUserIds = (lobby, aliveAtNightStart, blockedByEscort) =>
     if (!aliveAtNightStart.has(protectedUserId)) continue;
     if (blockedByEscort.has(doctorUserId)) continue;
     if (lobby.playerRoles.get(doctorUserId) !== 'Doctor') continue;
+
+    if (doctorUserId === protectedUserId) {
+      const roleState = lobby.playerRoleState?.get(doctorUserId) ?? {};
+      if (roleState.doctorSelfProtectUsed === true) continue;
+      roleState.doctorSelfProtectUsed = true;
+      lobby.playerRoleState?.set(doctorUserId, roleState);
+    }
+
     protectedUserIds.add(protectedUserId);
   }
   return protectedUserIds;
@@ -477,12 +603,14 @@ const emitNightActionNotice = (
   recipientUserIds,
   content,
   audience = 'private',
+  tone = 'death',
 ) => {
   if (!Array.isArray(recipientUserIds) || recipientUserIds.length === 0) return;
   const message = addTargetedSystemChatMessage(lobby, {
     audience,
     content,
     recipientUserIds,
+    tone,
   });
   emitChatMessage(io, lobby, message);
 };
@@ -490,6 +618,22 @@ const emitNightActionNotice = (
 const startNightActionResultsPhase = (io, lobby) => {
   lobby.gamePhase = 'nightActionResults';
   lobby.currentNightDeathReveal = null;
+
+  const reveals = Array.isArray(lobby.pendingNightDeathReveals)
+    ? lobby.pendingNightDeathReveals
+    : [];
+  const killedUserIds = reveals.map((reveal) => reveal?.userId).filter(Boolean);
+  if (killedUserIds.length > 0) {
+    emitNightActionNotice(
+      io,
+      lobby,
+      killedUserIds,
+      'You were killed during the night.',
+      'private',
+      'death',
+    );
+  }
+
   schedulePhaseTransition(io, lobby, NIGHT_ACTION_RESULTS_DURATION_MS, () => {
     startNightResultsPhase(io, lobby);
   });
@@ -503,13 +647,57 @@ const startNightPhase = (io, lobby, nightNumber) => {
   lobby.pendingNightDeathReveals = [];
   lobby.pendingWerewolfKillTargetId = null;
   lobby.pendingWerewolfKillActorUserId = null;
+  lobby.pendingAlphaWolfKillTargetId = null;
   lobby.pendingHunterKillTargets = new Map();
   lobby.pendingTrapperAlertUserIds = new Set();
   lobby.pendingEscortVisitTargets = new Map();
-  lobby.pendingSentinelGuardTargets = new Map();
+  lobby.pendingBodyguardGuardTargets = new Map();
   lobby.pendingDoctorProtectTargets = new Map();
+  lobby.pendingTrackerWatchTargets = new Map();
+  lobby.pendingLookoutWatchTargets = new Map();
+  lobby.pendingInvestigatorVisitTargets = new Map();
+  lobby.pendingFramerTargets = new Map();
+  lobby.pendingProwlerTargets = new Map();
+  lobby.pendingSnatcherTargets = new Map();
+  lobby.pendingCursedTargets = new Map();
+  lobby.pendingMimicTargets = new Map();
   lobby.currentVotes = new Map();
   lobby.currentEliminationResult = null;
+
+  const aliveNow = new Set(
+    Array.from(lobby.members.keys()).filter(
+      (userId) => !lobby.eliminatedUserIds.has(userId),
+    ),
+  );
+  const hasAliveAlpha = Array.from(lobby.playerRoles.entries()).some(
+    ([userId, role]) =>
+      role === 'AlphaWolf' && aliveNow.has(userId) && !lobby.eliminatedUserIds.has(userId),
+  );
+  if (!hasAliveAlpha) {
+    const aliveWerewolfIds = Array.from(lobby.playerRoles.entries())
+      .filter(
+        ([userId, role]) =>
+          isWerewolfRole(role) && aliveNow.has(userId) && !lobby.eliminatedUserIds.has(userId),
+      )
+      .map(([userId]) => userId);
+    if (aliveWerewolfIds.length > 0) {
+      const selectedUserId =
+        aliveWerewolfIds[Math.floor(Math.random() * aliveWerewolfIds.length)];
+      if (lobby.playerRoles.get(selectedUserId) !== 'AlphaWolf') {
+        lobby.playerRoles.set(selectedUserId, 'AlphaWolf');
+        const noticeContent = `${lobby.members.get(selectedUserId)?.name ?? 'A werewolf'} has been promoted to Alpha Wolf.`;
+        emitNightActionNotice(
+          io,
+          lobby,
+          aliveWerewolfIds,
+          noticeContent,
+          'werewolf',
+          'default',
+        );
+      }
+    }
+  }
+
   const werewolfNotice = addSystemChatMessage(lobby, {
     audience: 'werewolf',
     content: 'Werewolves can now chat secretly to decide who to kill.',
@@ -518,7 +706,7 @@ const startNightPhase = (io, lobby, nightNumber) => {
 
   const nonWerewolfUserIds = Array.from(lobby.members.keys()).filter((userId) => {
     if (lobby.eliminatedUserIds?.has(userId)) return false;
-    return lobby.playerRoles?.get(userId) !== 'Werewolf';
+    return !isWerewolfRole(lobby.playerRoles?.get(userId));
   });
   if (nonWerewolfUserIds.length > 0) {
     const villageChatLockedNotice = addTargetedSystemChatMessage(lobby, {
@@ -540,42 +728,161 @@ const startNightPhase = (io, lobby, nightNumber) => {
       );
       const deaths = new Set();
       const blockedByEscort = new Set();
+      const blockedBySnatcher = new Set();
       const attackedTargetIds = new Set();
       const trapperVisitedUserIds = new Set();
+      const visitsByUserId = new Map();
+      const visitorsByTargetUserId = new Map();
+      const disguisedRoleByUserId = new Map();
+
+      const addVisit = (visitorUserId, targetUserId) => {
+        if (!visitorUserId || !targetUserId) return;
+        visitsByUserId.set(visitorUserId, targetUserId);
+        if (!visitorsByTargetUserId.has(targetUserId)) {
+          visitorsByTargetUserId.set(targetUserId, new Set());
+        }
+        visitorsByTargetUserId.get(targetUserId).add(visitorUserId);
+      };
       for (const [escortUserId, targetUserId] of (
         lobby.pendingEscortVisitTargets?.entries() ?? []
       )) {
         if (!aliveAtNightStart.has(escortUserId)) continue;
         if (!aliveAtNightStart.has(targetUserId)) continue;
+        if (lobby.playerRoles.get(escortUserId) === 'Escort') {
+          addVisit(escortUserId, targetUserId);
+        }
         const targetRole = lobby.playerRoles.get(targetUserId);
         if (!hasNightAction(targetRole)) continue;
         blockedByEscort.add(targetUserId);
+      }
+
+      for (const [snatcherUserId, targetUserId] of (
+        lobby.pendingSnatcherTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(snatcherUserId)) continue;
+        if (!aliveAtNightStart.has(targetUserId)) continue;
+        if (blockedByEscort.has(snatcherUserId)) continue;
+        if (lobby.playerRoles.get(snatcherUserId) !== 'Snatcher') continue;
+        addVisit(snatcherUserId, targetUserId);
+        const targetRole = lobby.playerRoles.get(targetUserId);
+        if (!hasNightAction(targetRole)) continue;
+        blockedBySnatcher.add(targetUserId);
       }
       const alertedTrappers = new Set(
         Array.from(lobby.pendingTrapperAlertUserIds ?? new Set()).filter(
           (userId) =>
             aliveAtNightStart.has(userId) &&
-            !blockedByEscort.has(userId),
+            !blockedByEscort.has(userId) &&
+            !blockedBySnatcher.has(userId),
         ),
       );
       const doctorProtectedUserIds = getDoctorProtectedUserIds(
         lobby,
         aliveAtNightStart,
-        blockedByEscort,
+        new Set([...blockedByEscort, ...blockedBySnatcher]),
       );
+
+      const cursedUserIds = new Set();
+      for (const [cursedUserId, targetUserId] of (
+        lobby.pendingCursedTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(cursedUserId)) continue;
+        if (!aliveAtNightStart.has(targetUserId)) continue;
+        if (blockedByEscort.has(cursedUserId)) continue;
+        if (blockedBySnatcher.has(cursedUserId)) continue;
+        if (lobby.playerRoles.get(cursedUserId) !== 'Cursed') continue;
+        addVisit(cursedUserId, targetUserId);
+        cursedUserIds.add(targetUserId);
+      }
+
+      for (const cursedUserId of cursedUserIds) {
+        doctorProtectedUserIds.delete(cursedUserId);
+      }
+
+      const framedUserIds = new Set();
+      for (const [framerUserId, targetUserId] of (
+        lobby.pendingFramerTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(framerUserId)) continue;
+        if (!aliveAtNightStart.has(targetUserId)) continue;
+        if (blockedByEscort.has(framerUserId)) continue;
+        if (blockedBySnatcher.has(framerUserId)) continue;
+        if (lobby.playerRoles.get(framerUserId) !== 'Framer') continue;
+        addVisit(framerUserId, targetUserId);
+        framedUserIds.add(targetUserId);
+      }
+
+      for (const [mimicUserId, targetUserId] of (
+        lobby.pendingMimicTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(mimicUserId)) continue;
+        if (!aliveAtNightStart.has(targetUserId)) continue;
+        if (blockedByEscort.has(mimicUserId)) continue;
+        if (blockedBySnatcher.has(mimicUserId)) continue;
+        if (lobby.playerRoles.get(mimicUserId) !== 'Mimic') continue;
+        addVisit(mimicUserId, targetUserId);
+        const copiedRole = lobby.playerRoles.get(targetUserId) ?? null;
+        if (copiedRole) {
+          disguisedRoleByUserId.set(mimicUserId, copiedRole);
+        }
+      }
 
       const werewolfTargetId = lobby.pendingWerewolfKillTargetId;
       const werewolfActorUserId = lobby.pendingWerewolfKillActorUserId;
+      const alphaWolfTargetId = lobby.pendingAlphaWolfKillTargetId;
+      const aliveWerewolfIds = getAliveWerewolfIds(lobby, aliveAtNightStart);
+
+      const alphaWolfUserId = Array.from(lobby.playerRoles.entries()).find(
+        ([userId, role]) =>
+          role === 'AlphaWolf' &&
+          aliveAtNightStart.has(userId) &&
+          !lobby.eliminatedUserIds.has(userId),
+      )?.[0] ?? null;
+
+      const canAlphaKill =
+        alphaWolfUserId &&
+        alphaWolfTargetId &&
+        !blockedByEscort.has(alphaWolfUserId) &&
+        !blockedBySnatcher.has(alphaWolfUserId) &&
+        aliveAtNightStart.has(alphaWolfUserId) &&
+        aliveAtNightStart.has(alphaWolfTargetId) &&
+        !lobby.eliminatedUserIds.has(alphaWolfUserId) &&
+        lobby.playerRoles.get(alphaWolfUserId) === 'AlphaWolf';
+
+      if (canAlphaKill) {
+        addVisit(alphaWolfUserId, alphaWolfTargetId);
+        attackedTargetIds.add(alphaWolfTargetId);
+        if (alertedTrappers.has(alphaWolfTargetId)) {
+          trapperVisitedUserIds.add(alphaWolfTargetId);
+          if (aliveWerewolfIds.length > 0) {
+            const randomWerewolfId =
+              aliveWerewolfIds[Math.floor(Math.random() * aliveWerewolfIds.length)];
+            deaths.add(randomWerewolfId);
+          }
+        } else if (!doctorProtectedUserIds.has(alphaWolfTargetId)) {
+          const bodyguardGuardUserId = findBodyguardGuardForTarget(
+            lobby,
+            alphaWolfTargetId,
+            aliveAtNightStart,
+            new Set([...blockedByEscort, ...blockedBySnatcher]),
+          );
+          deaths.add(bodyguardGuardUserId ?? alphaWolfTargetId);
+        }
+      }
+
       if (
+        !canAlphaKill &&
         werewolfTargetId &&
         werewolfActorUserId &&
         !blockedByEscort.has(werewolfActorUserId) &&
+        !blockedBySnatcher.has(werewolfActorUserId) &&
         aliveAtNightStart.has(werewolfActorUserId) &&
         !lobby.eliminatedUserIds.has(werewolfActorUserId) &&
         lobby.playerRoles.get(werewolfActorUserId) === 'Werewolf' &&
         aliveAtNightStart.has(werewolfTargetId) &&
         alertedTrappers.has(werewolfTargetId)
       ) {
+        addVisit(werewolfActorUserId, werewolfTargetId);
         attackedTargetIds.add(werewolfTargetId);
         trapperVisitedUserIds.add(werewolfTargetId);
         const aliveWerewolfIds = getAliveWerewolfIds(lobby, aliveAtNightStart);
@@ -585,26 +892,29 @@ const startNightPhase = (io, lobby, nightNumber) => {
           deaths.add(randomWerewolfId);
         }
       } else if (
+        !canAlphaKill &&
         werewolfTargetId &&
         werewolfActorUserId &&
         !blockedByEscort.has(werewolfActorUserId) &&
+        !blockedBySnatcher.has(werewolfActorUserId) &&
         aliveAtNightStart.has(werewolfActorUserId) &&
         !lobby.eliminatedUserIds.has(werewolfActorUserId) &&
         lobby.playerRoles.get(werewolfActorUserId) === 'Werewolf' &&
         aliveAtNightStart.has(werewolfTargetId)
       ) {
+        addVisit(werewolfActorUserId, werewolfTargetId);
         attackedTargetIds.add(werewolfTargetId);
         if (alertedTrappers.has(werewolfTargetId)) {
           trapperVisitedUserIds.add(werewolfTargetId);
         }
         if (!doctorProtectedUserIds.has(werewolfTargetId)) {
-          const sentinelGuardUserId = findSentinelGuardForTarget(
+          const bodyguardGuardUserId = findBodyguardGuardForTarget(
             lobby,
             werewolfTargetId,
             aliveAtNightStart,
-            blockedByEscort,
+            new Set([...blockedByEscort, ...blockedBySnatcher]),
           );
-          deaths.add(sentinelGuardUserId ?? werewolfTargetId);
+          deaths.add(bodyguardGuardUserId ?? werewolfTargetId);
         }
       }
 
@@ -613,12 +923,14 @@ const startNightPhase = (io, lobby, nightNumber) => {
       )) {
         if (!aliveAtNightStart.has(hunterUserId)) continue;
         if (blockedByEscort.has(hunterUserId)) continue;
+        if (blockedBySnatcher.has(hunterUserId)) continue;
         if (!aliveAtNightStart.has(targetUserId)) continue;
 
         const roleState = lobby.playerRoleState?.get(hunterUserId);
         const shotsRemaining = roleState?.hunterShotsRemaining ?? 0;
         if (shotsRemaining <= 0) continue;
 
+        addVisit(hunterUserId, targetUserId);
         roleState.hunterShotsRemaining = shotsRemaining - 1;
         lobby.playerRoleState?.set(hunterUserId, roleState);
         attackedTargetIds.add(targetUserId);
@@ -632,13 +944,13 @@ const startNightPhase = (io, lobby, nightNumber) => {
         }
 
         if (!doctorProtectedUserIds.has(targetUserId)) {
-          const sentinelGuardUserId = findSentinelGuardForTarget(
+          const bodyguardGuardUserId = findBodyguardGuardForTarget(
             lobby,
             targetUserId,
             aliveAtNightStart,
-            blockedByEscort,
+            new Set([...blockedByEscort, ...blockedBySnatcher]),
           );
-          const resolvedVictimUserId = sentinelGuardUserId ?? targetUserId;
+          const resolvedVictimUserId = bodyguardGuardUserId ?? targetUserId;
           deaths.add(resolvedVictimUserId);
           const resolvedVictimRole = lobby.playerRoles.get(resolvedVictimUserId);
           if (isVillageRole(resolvedVictimRole)) {
@@ -647,23 +959,93 @@ const startNightPhase = (io, lobby, nightNumber) => {
         }
       }
 
+      for (const [doctorUserId, protectedUserId] of (
+        lobby.pendingDoctorProtectTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(doctorUserId)) continue;
+        if (blockedByEscort.has(doctorUserId)) continue;
+        if (blockedBySnatcher.has(doctorUserId)) continue;
+        if (!aliveAtNightStart.has(protectedUserId)) continue;
+        if (lobby.playerRoles.get(doctorUserId) !== 'Doctor') continue;
+        if (doctorUserId !== protectedUserId) {
+          addVisit(doctorUserId, protectedUserId);
+        }
+      }
+
+      for (const [bodyguardUserId, guardedUserId] of (
+        lobby.pendingBodyguardGuardTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(bodyguardUserId)) continue;
+        if (blockedByEscort.has(bodyguardUserId)) continue;
+        if (blockedBySnatcher.has(bodyguardUserId)) continue;
+        if (!aliveAtNightStart.has(guardedUserId)) continue;
+        if (lobby.playerRoles.get(bodyguardUserId) !== 'Bodyguard') continue;
+        addVisit(bodyguardUserId, guardedUserId);
+      }
+
+      for (const [trackerUserId, trackedUserId] of (
+        lobby.pendingTrackerWatchTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(trackerUserId)) continue;
+        if (blockedByEscort.has(trackerUserId)) continue;
+        if (blockedBySnatcher.has(trackerUserId)) continue;
+        if (!aliveAtNightStart.has(trackedUserId)) continue;
+        if (lobby.playerRoles.get(trackerUserId) !== 'Tracker') continue;
+        addVisit(trackerUserId, trackedUserId);
+      }
+
+      for (const [lookoutUserId, watchedUserId] of (
+        lobby.pendingLookoutWatchTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(lookoutUserId)) continue;
+        if (blockedByEscort.has(lookoutUserId)) continue;
+        if (blockedBySnatcher.has(lookoutUserId)) continue;
+        if (!aliveAtNightStart.has(watchedUserId)) continue;
+        if (lobby.playerRoles.get(lookoutUserId) !== 'Lookout') continue;
+        addVisit(lookoutUserId, watchedUserId);
+      }
+
+      for (const [investigatorUserId, targetUserId] of (
+        lobby.pendingInvestigatorVisitTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(investigatorUserId)) continue;
+        if (blockedByEscort.has(investigatorUserId)) continue;
+        if (blockedBySnatcher.has(investigatorUserId)) continue;
+        if (!aliveAtNightStart.has(targetUserId)) continue;
+        if (lobby.playerRoles.get(investigatorUserId) !== 'Investigator') continue;
+        addVisit(investigatorUserId, targetUserId);
+      }
+
+      for (const [prowlerUserId, targetUserId] of (
+        lobby.pendingProwlerTargets?.entries() ?? []
+      )) {
+        if (!aliveAtNightStart.has(prowlerUserId)) continue;
+        if (blockedByEscort.has(prowlerUserId)) continue;
+        if (blockedBySnatcher.has(prowlerUserId)) continue;
+        if (!aliveAtNightStart.has(targetUserId)) continue;
+        if (lobby.playerRoles.get(prowlerUserId) !== 'Prowler') continue;
+        addVisit(prowlerUserId, targetUserId);
+      }
+
       for (const userId of deaths) {
         addNightDeathReveal(lobby, userId);
       }
 
       convertExecutionersToJesterForNightDeaths(lobby, deaths);
 
-      const aliveWerewolfIds = getAliveWerewolfIds(lobby, aliveAtNightStart);
-      if (werewolfTargetId && aliveWerewolfIds.length > 0) {
-        const targetName = lobby.members.get(werewolfTargetId)?.name ?? 'Your target';
-        if (!deaths.has(werewolfTargetId)) {
-          emitNightActionNotice(
-            io,
-            lobby,
-            aliveWerewolfIds,
-            `${targetName} survived the night.`,
-            'werewolf',
-          );
+      if (aliveWerewolfIds.length > 0) {
+        const killTargetId = alphaWolfTargetId ?? werewolfTargetId ?? null;
+        if (killTargetId) {
+          const targetName = lobby.members.get(killTargetId)?.name ?? 'Your target';
+          if (!deaths.has(killTargetId)) {
+            emitNightActionNotice(
+              io,
+              lobby,
+              aliveWerewolfIds,
+              `${targetName} survived the night.`,
+              'werewolf',
+            );
+          }
         }
       }
 
@@ -672,6 +1054,7 @@ const startNightPhase = (io, lobby, nightNumber) => {
       )) {
         if (!aliveAtNightStart.has(doctorUserId)) continue;
         if (blockedByEscort.has(doctorUserId)) continue;
+        if (blockedBySnatcher.has(doctorUserId)) continue;
         if (!attackedTargetIds.has(protectedUserId)) continue;
         const targetName = lobby.members.get(protectedUserId)?.name ?? 'Your target';
         emitNightActionNotice(
@@ -682,17 +1065,18 @@ const startNightPhase = (io, lobby, nightNumber) => {
         );
       }
 
-      for (const [sentinelUserId, guardedUserId] of (
-        lobby.pendingSentinelGuardTargets?.entries() ?? []
+      for (const [bodyguardUserId, guardedUserId] of (
+        lobby.pendingBodyguardGuardTargets?.entries() ?? []
       )) {
-        if (!aliveAtNightStart.has(sentinelUserId)) continue;
-        if (blockedByEscort.has(sentinelUserId)) continue;
+        if (!aliveAtNightStart.has(bodyguardUserId)) continue;
+        if (blockedByEscort.has(bodyguardUserId)) continue;
+        if (blockedBySnatcher.has(bodyguardUserId)) continue;
         if (!attackedTargetIds.has(guardedUserId)) continue;
         const targetName = lobby.members.get(guardedUserId)?.name ?? 'Your target';
         emitNightActionNotice(
           io,
           lobby,
-          [sentinelUserId],
+          [bodyguardUserId],
           `${targetName} was attacked during the night.`,
         );
       }
@@ -706,14 +1090,256 @@ const startNightPhase = (io, lobby, nightNumber) => {
         );
       }
 
+      const pendingTrackerResults = Array.from(
+        lobby.pendingTrackerWatchTargets?.entries() ?? [],
+      );
+      const pendingLookoutResults = Array.from(
+        lobby.pendingLookoutWatchTargets?.entries() ?? [],
+      );
+      const pendingInvestigatorResults = Array.from(
+        lobby.pendingInvestigatorVisitTargets?.entries() ?? [],
+      );
+      const pendingProwlerResults = Array.from(
+        lobby.pendingProwlerTargets?.entries() ?? [],
+      );
+      const pendingFramerResults = Array.from(
+        lobby.pendingFramerTargets?.entries() ?? [],
+      );
+      const pendingSnatcherResults = Array.from(
+        lobby.pendingSnatcherTargets?.entries() ?? [],
+      );
+      const pendingCursedResults = Array.from(
+        lobby.pendingCursedTargets?.entries() ?? [],
+      );
+      const pendingMimicResults = Array.from(
+        lobby.pendingMimicTargets?.entries() ?? [],
+      );
+
       lobby.pendingWerewolfKillTargetId = null;
       lobby.pendingWerewolfKillActorUserId = null;
+      lobby.pendingAlphaWolfKillTargetId = null;
       lobby.pendingHunterKillTargets = new Map();
       lobby.pendingTrapperAlertUserIds = new Set();
       lobby.pendingEscortVisitTargets = new Map();
-      lobby.pendingSentinelGuardTargets = new Map();
+      lobby.pendingBodyguardGuardTargets = new Map();
       lobby.pendingDoctorProtectTargets = new Map();
+      lobby.pendingTrackerWatchTargets = new Map();
+      lobby.pendingLookoutWatchTargets = new Map();
+      lobby.pendingInvestigatorVisitTargets = new Map();
+      lobby.pendingProwlerTargets = new Map();
+      lobby.pendingFramerTargets = new Map();
+      lobby.pendingSnatcherTargets = new Map();
+      lobby.pendingCursedTargets = new Map();
+      lobby.pendingMimicTargets = new Map();
+
       startNightActionResultsPhase(io, lobby);
+
+      for (const [trackerUserId, trackedUserId] of pendingTrackerResults) {
+        if (!aliveAtNightStart.has(trackerUserId)) continue;
+        if (lobby.playerRoles.get(trackerUserId) !== 'Tracker') continue;
+        if (blockedByEscort.has(trackerUserId) || blockedBySnatcher.has(trackerUserId)) {
+          emitNightActionNotice(
+            io,
+            lobby,
+            [trackerUserId],
+            'You were roleblocked and learned nothing.',
+          );
+          continue;
+        }
+        const trackedName = lobby.members.get(trackedUserId)?.name ?? 'That player';
+        const visitedTargetId = visitsByUserId.get(trackedUserId) ?? null;
+        if (!visitedTargetId) {
+          emitNightActionNotice(
+            io,
+            lobby,
+            [trackerUserId],
+            `${trackedName} did not visit anyone.`,
+          );
+          continue;
+        }
+        const visitedName = lobby.members.get(visitedTargetId)?.name ?? 'someone';
+        emitNightActionNotice(
+          io,
+          lobby,
+          [trackerUserId],
+          `${trackedName} visited ${visitedName}.`,
+        );
+      }
+
+      for (const [lookoutUserId, watchedUserId] of pendingLookoutResults) {
+        if (!aliveAtNightStart.has(lookoutUserId)) continue;
+        if (lobby.playerRoles.get(lookoutUserId) !== 'Lookout') continue;
+        if (blockedByEscort.has(lookoutUserId) || blockedBySnatcher.has(lookoutUserId)) {
+          emitNightActionNotice(
+            io,
+            lobby,
+            [lookoutUserId],
+            'You were roleblocked and learned nothing.',
+          );
+          continue;
+        }
+        const watchedName = lobby.members.get(watchedUserId)?.name ?? 'that player';
+        const visitorIds = Array.from(visitorsByTargetUserId.get(watchedUserId) ?? [])
+          .filter((id) => id && id !== lookoutUserId);
+        if (visitorIds.length === 0) {
+          emitNightActionNotice(
+            io,
+            lobby,
+            [lookoutUserId],
+            `No one visited ${watchedName}.`,
+          );
+          continue;
+        }
+        const visitorNames = visitorIds.map(
+          (id) => lobby.members.get(id)?.name ?? 'Unknown Player',
+        );
+        emitNightActionNotice(
+          io,
+          lobby,
+          [lookoutUserId],
+          `${formatNameList(visitorNames)} visited ${watchedName}.`,
+        );
+      }
+
+      for (const [investigatorUserId, targetUserId] of pendingInvestigatorResults) {
+        if (!aliveAtNightStart.has(investigatorUserId)) continue;
+        if (lobby.playerRoles.get(investigatorUserId) !== 'Investigator') continue;
+        if (blockedByEscort.has(investigatorUserId) || blockedBySnatcher.has(investigatorUserId)) {
+          emitNightActionNotice(
+            io,
+            lobby,
+            [investigatorUserId],
+            'You were roleblocked and learned nothing.',
+          );
+          continue;
+        }
+        const targetName = lobby.members.get(targetUserId)?.name ?? 'That player';
+        const baseRole = lobby.playerRoles.get(targetUserId) ?? null;
+        const effectiveRole = framedUserIds.has(targetUserId)
+          ? 'Werewolf'
+          : (disguisedRoleByUserId.get(targetUserId) ?? baseRole);
+        const possibleRoles =
+          (effectiveRole && INVESTIGATOR_RESULTS_BY_ROLE[effectiveRole]) || null;
+        const formattedPossibleRoles = possibleRoles
+          ? formatChoiceList(
+              possibleRoles.map((role) => {
+                const displayName = getRoleDisplayName(role);
+                return `${articleFor(displayName)} ${displayName}`;
+              }),
+            )
+          : null;
+        emitNightActionNotice(
+          io,
+          lobby,
+          [investigatorUserId],
+          formattedPossibleRoles
+            ? `${targetName} could be ${formattedPossibleRoles}.`
+            : `${targetName} yields no useful clues.`,
+        );
+      }
+
+      for (const [prowlerUserId, targetUserId] of pendingProwlerResults) {
+        if (!aliveAtNightStart.has(prowlerUserId)) continue;
+        if (lobby.playerRoles.get(prowlerUserId) !== 'Prowler') continue;
+        if (blockedByEscort.has(prowlerUserId) || blockedBySnatcher.has(prowlerUserId)) {
+          emitNightActionNotice(
+            io,
+            lobby,
+            [prowlerUserId],
+            'You were roleblocked and learned nothing.',
+          );
+          continue;
+        }
+        const targetName = lobby.members.get(targetUserId)?.name ?? 'That player';
+        const baseRole = lobby.playerRoles.get(targetUserId) ?? null;
+        const possibleRoles =
+          (baseRole && INVESTIGATOR_RESULTS_BY_ROLE[baseRole]) || null;
+        const formattedPossibleRoles = possibleRoles
+          ? formatChoiceList(
+              possibleRoles.map((role) => {
+                const displayName = getRoleDisplayName(role);
+                return `${articleFor(displayName)} ${displayName}`;
+              }),
+            )
+          : null;
+        emitNightActionNotice(
+          io,
+          lobby,
+          [prowlerUserId],
+          formattedPossibleRoles
+            ? `${targetName} could be ${formattedPossibleRoles}.`
+            : `${targetName} yields no useful clues.`,
+        );
+      }
+
+      for (const [framerUserId, targetUserId] of pendingFramerResults) {
+        if (!aliveAtNightStart.has(framerUserId)) continue;
+        if (lobby.playerRoles.get(framerUserId) !== 'Framer') continue;
+        if (blockedByEscort.has(framerUserId) || blockedBySnatcher.has(framerUserId)) {
+          emitNightActionNotice(
+            io,
+            lobby,
+            [framerUserId],
+            'You were roleblocked and framed no one.',
+          );
+          continue;
+        }
+        const targetName = lobby.members.get(targetUserId)?.name ?? 'That player';
+        emitNightActionNotice(io, lobby, [framerUserId], `You framed ${targetName}.`);
+      }
+
+      for (const [snatcherUserId, targetUserId] of pendingSnatcherResults) {
+        if (!aliveAtNightStart.has(snatcherUserId)) continue;
+        if (lobby.playerRoles.get(snatcherUserId) !== 'Snatcher') continue;
+        if (blockedByEscort.has(snatcherUserId)) {
+          emitNightActionNotice(
+            io,
+            lobby,
+            [snatcherUserId],
+            'You were roleblocked and snatched no one.',
+          );
+          continue;
+        }
+        const targetName = lobby.members.get(targetUserId)?.name ?? 'That player';
+        emitNightActionNotice(io, lobby, [snatcherUserId], `You snatched ${targetName}.`);
+      }
+
+      for (const [cursedUserId, targetUserId] of pendingCursedResults) {
+        if (!aliveAtNightStart.has(cursedUserId)) continue;
+        if (lobby.playerRoles.get(cursedUserId) !== 'Cursed') continue;
+        if (blockedByEscort.has(cursedUserId) || blockedBySnatcher.has(cursedUserId)) {
+          emitNightActionNotice(
+            io,
+            lobby,
+            [cursedUserId],
+            'You were roleblocked and cursed no one.',
+          );
+          continue;
+        }
+        const targetName = lobby.members.get(targetUserId)?.name ?? 'That player';
+        emitNightActionNotice(io, lobby, [cursedUserId], `You cursed ${targetName}.`);
+      }
+
+      for (const [mimicUserId, targetUserId] of pendingMimicResults) {
+        if (!aliveAtNightStart.has(mimicUserId)) continue;
+        if (lobby.playerRoles.get(mimicUserId) !== 'Mimic') continue;
+        if (blockedByEscort.has(mimicUserId) || blockedBySnatcher.has(mimicUserId)) {
+          emitNightActionNotice(
+            io,
+            lobby,
+            [mimicUserId],
+            'You were roleblocked and mimicked no one.',
+          );
+          continue;
+        }
+        const targetName = lobby.members.get(targetUserId)?.name ?? 'That player';
+        emitNightActionNotice(
+          io,
+          lobby,
+          [mimicUserId],
+          `You mimicked ${targetName}'s role.`,
+        );
+      }
     },
   );
   emitLobbyUpdate(io, lobby);
@@ -725,9 +1351,12 @@ const startNightResultsPhase = (io, lobby) => {
     : [];
 
   for (const reveal of reveals) {
+    const recipientUserIds = Array.from(lobby.members.keys()).filter(
+      (userId) => userId !== reveal.userId,
+    );
     const deathNotice = addTargetedSystemChatMessage(lobby, {
       audience: 'private',
-      recipientUserIds: Array.from(lobby.members.keys()),
+      recipientUserIds,
       content: `${reveal.name} died during the night.`,
       tone: 'death',
     });
@@ -917,6 +1546,9 @@ export const leaveLobby = (io, socket, lobbyName) => {
     lobby.pendingWerewolfKillTargetId = null;
     lobby.pendingWerewolfKillActorUserId = null;
   }
+  if (lobby.pendingAlphaWolfKillTargetId === user.id) {
+    lobby.pendingAlphaWolfKillTargetId = null;
+  }
   lobby.pendingHunterKillTargets?.delete(user.id);
   for (const [hunterUserId, targetUserId] of lobby.pendingHunterKillTargets?.entries() ?? []) {
     if (targetUserId === user.id) {
@@ -925,21 +1557,69 @@ export const leaveLobby = (io, socket, lobbyName) => {
   }
   lobby.pendingTrapperAlertUserIds?.delete(user.id);
   lobby.pendingEscortVisitTargets?.delete(user.id);
-  lobby.pendingSentinelGuardTargets?.delete(user.id);
+  lobby.pendingBodyguardGuardTargets?.delete(user.id);
   lobby.pendingDoctorProtectTargets?.delete(user.id);
+  lobby.pendingTrackerWatchTargets?.delete(user.id);
+  lobby.pendingLookoutWatchTargets?.delete(user.id);
+  lobby.pendingInvestigatorVisitTargets?.delete(user.id);
+  lobby.pendingFramerTargets?.delete(user.id);
+  lobby.pendingProwlerTargets?.delete(user.id);
+  lobby.pendingSnatcherTargets?.delete(user.id);
+  lobby.pendingCursedTargets?.delete(user.id);
+  lobby.pendingMimicTargets?.delete(user.id);
   for (const [escortUserId, targetUserId] of lobby.pendingEscortVisitTargets?.entries() ?? []) {
     if (targetUserId === user.id) {
       lobby.pendingEscortVisitTargets.delete(escortUserId);
     }
   }
-  for (const [sentinelUserId, targetUserId] of lobby.pendingSentinelGuardTargets?.entries() ?? []) {
+  for (const [bodyguardUserId, targetUserId] of lobby.pendingBodyguardGuardTargets?.entries() ?? []) {
     if (targetUserId === user.id) {
-      lobby.pendingSentinelGuardTargets.delete(sentinelUserId);
+      lobby.pendingBodyguardGuardTargets.delete(bodyguardUserId);
     }
   }
   for (const [doctorUserId, targetUserId] of lobby.pendingDoctorProtectTargets?.entries() ?? []) {
     if (targetUserId === user.id) {
       lobby.pendingDoctorProtectTargets.delete(doctorUserId);
+    }
+  }
+  for (const [trackerUserId, targetUserId] of lobby.pendingTrackerWatchTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingTrackerWatchTargets.delete(trackerUserId);
+    }
+  }
+  for (const [lookoutUserId, targetUserId] of lobby.pendingLookoutWatchTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingLookoutWatchTargets.delete(lookoutUserId);
+    }
+  }
+  for (const [investigatorUserId, targetUserId] of lobby.pendingInvestigatorVisitTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingInvestigatorVisitTargets.delete(investigatorUserId);
+    }
+  }
+  for (const [framerUserId, targetUserId] of lobby.pendingFramerTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingFramerTargets.delete(framerUserId);
+    }
+  }
+  for (const [prowlerUserId, targetUserId] of lobby.pendingProwlerTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingProwlerTargets.delete(prowlerUserId);
+    }
+  }
+  for (const [snatcherUserId, targetUserId] of lobby.pendingSnatcherTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingSnatcherTargets.delete(snatcherUserId);
+    }
+  }
+  for (const [cursedUserId, targetUserId] of lobby.pendingCursedTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingCursedTargets.delete(cursedUserId);
+    }
+  }
+  for (const [mimicUserId, targetUserId] of lobby.pendingMimicTargets?.entries() ?? []) {
+    if (targetUserId === user.id) {
+      lobby.pendingMimicTargets.delete(mimicUserId);
     }
   }
   lobby.playerRoleState?.delete(user.id);
