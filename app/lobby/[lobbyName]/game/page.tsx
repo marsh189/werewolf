@@ -1,7 +1,8 @@
-'use client';
+﻿'use client';
 
 import GameNotebook from '@/components/game/GameNotebook';
 import EliminationResultsCard from '@/components/game/EliminationResultsCard';
+import EndGameScene from '@/components/game/EndGameScene';
 import GameChat from '@/components/game/GameChat';
 import NightResultsScene from '@/components/game/NightResultsScene';
 import NotebookModal from '@/components/game/NotebookModal';
@@ -30,6 +31,7 @@ import {
 } from '@/lib/gameSocketActions';
 import { useGamePhaseAnimation } from '@/lib/useGamePhaseAnimation';
 import { useLobbyRealtime } from '@/lib/useLobbyRealtime';
+import { socket } from '@/lib/socket';
 import { getRoleDisplayName, ROLES } from '@/models/roles';
 import type { NightInstructionContext, Role } from '@/models/roles';
 import type {
@@ -41,13 +43,21 @@ import type {
 import type { EliminationResult, LobbyMember } from '@/models/lobby';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 export default function LobbyGamePage() {
   const router = useRouter();
   const { data: session } = useSession();
   const { lobbyName } = useParams<{ lobbyName: string }>();
   const { lobbyInfo } = useLobbyRealtime(lobbyName);
+  const [nowMs, setNowMs] = useState<number | null>(null);
+  const navigatedToResultsRef = useRef(false);
+
+  useEffect(() => {
+    if (!lobbyName || typeof lobbyName !== 'string') return;
+    if (!socket.connected) socket.connect();
+    socket.emit('presence:setView', { lobbyName, view: 'game' });
+  }, [lobbyName]);
 
   const [phase, setPhase] = useState<GamePhase>('lobby');
   const [dayNumber, setDayNumber] = useState<number | null>(null);
@@ -60,28 +70,33 @@ export default function LobbyGamePage() {
   } | null>(null);
   const [currentEliminationResult, setCurrentEliminationResult] =
     useState<EliminationResult | null>(null);
-  const [viewingNotebook, setViewingNotebook] = useState<NotebookView | null>(null);
+  const [viewingNotebook, setViewingNotebook] = useState<NotebookView | null>(
+    null,
+  );
   const [role, setRole] = useState<string | null>(null);
   const [gameStarted, setGameStarted] = useState<boolean>(true);
   const [gameHostUserId, setGameHostUserId] = useState<string | null>(null);
   const [canWriteNotebook, setCanWriteNotebook] = useState<boolean>(true);
   const [werewolfUserIds, setWerewolfUserIds] = useState<string[]>([]);
   const [hunterShotsRemaining, setHunterShotsRemaining] = useState<number>(0);
-  const [trapperAlertsRemaining, setTrapperAlertsRemaining] = useState<number>(0);
+  const [trapperAlertsRemaining, setTrapperAlertsRemaining] =
+    useState<number>(0);
   const [trapperAlertActive, setTrapperAlertActive] = useState<boolean>(false);
-  const [doctorSelfProtectUsed, setDoctorSelfProtectUsed] = useState<boolean>(false);
-  const [executionerTargetName, setExecutionerTargetName] = useState<string | null>(
-    null,
-  );
+  const [doctorSelfProtectUsed, setDoctorSelfProtectUsed] =
+    useState<boolean>(false);
+  const [executionerTargetName, setExecutionerTargetName] = useState<
+    string | null
+  >(null);
   const [executionerTargetUserId, setExecutionerTargetUserId] = useState<
     string | null
   >(null);
-  const [selectedNightActionTargetId, setSelectedNightActionTargetId] = useState<
+  const [selectedNightActionTargetId, setSelectedNightActionTargetId] =
+    useState<string | null>(null);
+  const [selectedVoteTargetId, setSelectedVoteTargetId] = useState<
     string | null
   >(null);
-  const [selectedVoteTargetId, setSelectedVoteTargetId] = useState<string | null>(
-    null,
-  );
+  const [roleInfoPinnedOpen, setRoleInfoPinnedOpen] = useState(false);
+  const [roleInfoHovered, setRoleInfoHovered] = useState(false);
 
   useEffect(() => {
     if (!lobbyName) return;
@@ -108,7 +123,9 @@ export default function LobbyGamePage() {
       setTrapperAlertActive(game.trapperAlertActive ?? false);
       setDoctorSelfProtectUsed(game.doctorSelfProtectUsed ?? false);
       setSelectedNightActionTargetId((previous) =>
-        game.role === 'AlphaWolf' || game.role === 'Werewolf' || game.role === 'Hunter'
+        game.role === 'AlphaWolf' ||
+        game.role === 'Werewolf' ||
+        game.role === 'Hunter'
           ? (game.nightKillTargetUserId ?? null)
           : game.role === 'Escort'
             ? (game.escortVisitTargetUserId ?? null)
@@ -128,11 +145,11 @@ export default function LobbyGamePage() {
                           ? (game.prowlerTargetUserId ?? null)
                           : game.role === 'Snatcher'
                             ? (game.snatcherTargetUserId ?? null)
-                      : game.role === 'Cursed'
-                        ? (game.cursedTargetUserId ?? null)
-                        : game.role === 'Mimic'
-                          ? (game.mimicTargetUserId ?? null)
-          : previous,
+                            : game.role === 'Cursed'
+                              ? (game.cursedTargetUserId ?? null)
+                              : game.role === 'Mimic'
+                                ? (game.mimicTargetUserId ?? null)
+                                : previous,
       );
       setExecutionerTargetName(game.executionerTargetName ?? null);
       setExecutionerTargetUserId(game.executionerTargetUserId ?? null);
@@ -152,7 +169,9 @@ export default function LobbyGamePage() {
       setTrapperAlertActive(game.trapperAlertActive ?? false);
       setDoctorSelfProtectUsed(game.doctorSelfProtectUsed ?? false);
       setSelectedNightActionTargetId((previous) =>
-        game.role === 'AlphaWolf' || game.role === 'Werewolf' || game.role === 'Hunter'
+        game.role === 'AlphaWolf' ||
+        game.role === 'Werewolf' ||
+        game.role === 'Hunter'
           ? (game.nightKillTargetUserId ?? null)
           : game.role === 'Escort'
             ? (game.escortVisitTargetUserId ?? null)
@@ -172,16 +191,28 @@ export default function LobbyGamePage() {
                           ? (game.prowlerTargetUserId ?? null)
                           : game.role === 'Snatcher'
                             ? (game.snatcherTargetUserId ?? null)
-                              : game.role === 'Cursed'
-                                ? (game.cursedTargetUserId ?? null)
-                                : game.role === 'Mimic'
-                                  ? (game.mimicTargetUserId ?? null)
-          : previous,
+                            : game.role === 'Cursed'
+                              ? (game.cursedTargetUserId ?? null)
+                              : game.role === 'Mimic'
+                                ? (game.mimicTargetUserId ?? null)
+                                : previous,
       );
       setExecutionerTargetName(game.executionerTargetName ?? null);
       setExecutionerTargetUserId(game.executionerTargetUserId ?? null);
     });
   }, [lobbyName, lobbyInfo]);
+
+  useEffect(() => {
+    if (!lobbyName) return;
+    if (lobbyInfo?.gamePhase !== 'gameResults') return;
+    if (navigatedToResultsRef.current) return;
+    navigatedToResultsRef.current = true;
+
+    const id = setTimeout(() => {
+      router.replace(`/lobby/${encodeURIComponent(lobbyName)}/results`);
+    }, 900);
+    return () => clearTimeout(id);
+  }, [lobbyInfo?.gamePhase, lobbyName, router]);
 
   const started = lobbyInfo?.started ?? gameStarted;
   const currentPhase = lobbyInfo?.gamePhase ?? phase;
@@ -211,6 +242,10 @@ export default function LobbyGamePage() {
     })
     .map(({ member }) => member);
   const selfAlive = selfMember?.alive ?? true;
+  const startingRemainingSeconds =
+    lobbyInfo?.startingAt && nowMs !== null
+      ? Math.max(0, Math.ceil((lobbyInfo.startingAt - nowMs) / 1000))
+      : null;
 
   const { revealState, nightResultRevealState, phaseOverlayState } =
     useGamePhaseAnimation({
@@ -227,19 +262,19 @@ export default function LobbyGamePage() {
     effectiveDisplayPhase === 'eliminationResults';
   const isNightCyclePhase = effectiveDisplayPhase === 'night';
   const roleName = role ?? 'Unknown';
-  const roleInfo =
-    role && role in ROLES ? ROLES[role as Role] : null;
+  const roleInfo = role && role in ROLES ? ROLES[role as Role] : null;
   const roleDisplayName = getRoleDisplayName(roleName);
+  const didWin = roleInfo ? roleInfo.faction === 'Village' : null;
   const phaseSubLabel =
     effectiveDisplayPhase === 'day'
       ? 'The village gathers by torchlight.'
       : effectiveDisplayPhase === 'vote'
         ? 'Whispers turn to accusations.'
-      : effectiveDisplayPhase === 'eliminationResults'
+        : effectiveDisplayPhase === 'eliminationResults'
           ? 'The village passes judgment.'
-            : effectiveDisplayPhase === 'night'
-              ? 'Shadows deepen and choices are made in secret.'
-          : null;
+          : effectiveDisplayPhase === 'night'
+            ? 'Shadows deepen and choices are made in secret.'
+            : null;
 
   const nightInstruction = (() => {
     if (!selfAlive) return 'You are dead. You cannot act, but you can observe.';
@@ -295,11 +330,11 @@ export default function LobbyGamePage() {
         : 'Discuss what happened last night and share suspicions.'
       : effectiveDisplayPhase === 'vote'
         ? 'Cast your vote for the player you believe is a werewolf.'
-      : effectiveDisplayPhase === 'eliminationResults'
+        : effectiveDisplayPhase === 'eliminationResults'
           ? 'Review the outcome and prepare for the coming night.'
-      : effectiveDisplayPhase === 'night'
-          ? nightInstruction
-          : null;
+          : effectiveDisplayPhase === 'night'
+            ? nightInstruction
+            : null;
   const eliminationResultsKey =
     eliminationResult?.noElimination === true
       ? `elim-result-none-${currentDayNumber ?? 0}`
@@ -308,7 +343,8 @@ export default function LobbyGamePage() {
         : `elim-result-waiting-${currentDayNumber ?? 0}`;
 
   useEffect(() => {
-    if (effectiveDisplayPhase === 'day' || effectiveDisplayPhase === 'night') return;
+    if (effectiveDisplayPhase === 'day' || effectiveDisplayPhase === 'night')
+      return;
     const id = setTimeout(() => {
       setViewingNotebook(null);
     }, 0);
@@ -330,8 +366,23 @@ export default function LobbyGamePage() {
   useEffect(() => {
     if (started) return;
     if (!lobbyName) return;
+    if (lobbyInfo?.startingAt) return;
     router.push(`/lobby/${encodeURIComponent(lobbyName)}`);
-  }, [started, lobbyName, router]);
+  }, [lobbyInfo?.startingAt, started, lobbyName, router]);
+
+  useEffect(() => {
+    if (!lobbyInfo?.startingAt) return;
+    const kickoffId = setTimeout(() => {
+      setNowMs(Date.now());
+    }, 0);
+    const id = setInterval(() => {
+      setNowMs(Date.now());
+    }, 250);
+    return () => {
+      clearTimeout(kickoffId);
+      clearInterval(id);
+    };
+  }, [lobbyInfo?.startingAt]);
 
   const isHost =
     !!session?.user?.id && !!hostUserId && session.user.id === hostUserId;
@@ -359,16 +410,34 @@ export default function LobbyGamePage() {
     </button>
   ) : null;
 
+  const showRoleInfo = roleInfoPinnedOpen || roleInfoHovered;
+
   const renderRoleInfo = () => (
-    <div className="relative inline-flex items-center group z-40">
+    <div className="relative inline-flex items-center z-40">
       <button
         type="button"
         aria-label={`${roleDisplayName} role info`}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-500/60 text-[11px] font-bold text-slate-200 hover:bg-slate-700/60"
+        aria-expanded={showRoleInfo}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-500/60 text-[11px] font-bold text-slate-200 hover:bg-slate-700/60 focus:outline-none focus:ring-2 focus:ring-sky-400"
+        onMouseEnter={() => setRoleInfoHovered(true)}
+        onMouseLeave={() => setRoleInfoHovered(false)}
+        onFocus={() => setRoleInfoHovered(true)}
+        onBlur={() => setRoleInfoHovered(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setRoleInfoPinnedOpen(false);
+          }
+        }}
+        onClick={() => setRoleInfoPinnedOpen((prev) => !prev)}
       >
         i
       </button>
-      <div className="pointer-events-none absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-md border border-slate-600 bg-slate-900/95 p-2 text-left text-xs text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+      <div
+        className={[
+          'pointer-events-none absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-md border border-slate-600 bg-slate-900/95 p-2 text-left text-xs text-slate-200 shadow-lg transition-opacity',
+          showRoleInfo ? 'opacity-100' : 'opacity-0',
+        ].join(' ')}
+      >
         {roleInfo ? (
           <>
             <p className="leading-tight">{roleInfo.ability}</p>
@@ -377,7 +446,9 @@ export default function LobbyGamePage() {
             </p>
           </>
         ) : (
-          <p className="leading-tight text-slate-300">Role information unavailable.</p>
+          <p className="leading-tight text-slate-300">
+            Role information unavailable.
+          </p>
         )}
         {roleName === 'Hunter' ? (
           <p className="mt-1 leading-tight text-sky-300">
@@ -401,7 +472,8 @@ export default function LobbyGamePage() {
   const renderMemberRow = (member: LobbyMember) => {
     const canKillAtNight =
       effectiveDisplayPhase === 'night' &&
-      ((roleName === 'Werewolf' || roleName === 'AlphaWolf') ||
+      (roleName === 'Werewolf' ||
+        roleName === 'AlphaWolf' ||
         (roleName === 'Hunter' && hunterShotsRemaining > 0)) &&
       selfAlive &&
       member.alive &&
@@ -494,8 +566,7 @@ export default function LobbyGamePage() {
       (currentPhase === 'vote' && selectedVoteTargetId === member.userId);
 
     const isExecutionerTarget =
-      roleName === 'Executioner' &&
-      executionerTargetUserId === member.userId;
+      roleName === 'Executioner' && executionerTargetUserId === member.userId;
 
     return (
       <button
@@ -630,7 +701,7 @@ export default function LobbyGamePage() {
                 ? 'text-red-300'
                 : isExecutionerTarget
                   ? 'text-violet-300'
-                : 'text-white',
+                  : 'text-white',
             ].join(' ')}
           >
             {member.name}
@@ -666,7 +737,19 @@ export default function LobbyGamePage() {
 
   return (
     <>
-      {currentPhase === 'roleReveal' ? (
+      {currentPhase === 'lobby' && lobbyInfo?.startingAt ? (
+        <div className="game-cinematic-scene min-h-screen flex items-center justify-center px-6 py-12">
+          <div className="w-full max-w-3xl text-center space-y-4">
+            <p className="game-tight-label">Starting</p>
+            <h1 className="game-title">Game begins soon</h1>
+            <p className="text-slate-300 text-sm">
+              {startingRemainingSeconds !== null
+                ? `Starting in ${startingRemainingSeconds}s...`
+                : 'Preparing the lobby...'}
+            </p>
+          </div>
+        </div>
+      ) : currentPhase === 'roleReveal' ? (
         <RoleRevealScene
           phaseEndsAt={currentPhaseEndsAt}
           revealState={revealState}
@@ -680,6 +763,14 @@ export default function LobbyGamePage() {
           revealDeath={revealDeath}
           endGameButton={endGameButton}
         />
+      ) : currentPhase === 'endGame' ? (
+        <EndGameScene
+          phaseEndsAt={currentPhaseEndsAt}
+          didWin={didWin}
+          endGameButton={endGameButton}
+        />
+      ) : currentPhase === 'gameResults' ? (
+        <div className="game-cinematic-scene min-h-screen" />
       ) : (
         <div
           className={[
@@ -690,12 +781,16 @@ export default function LobbyGamePage() {
           <header className="mx-auto w-full max-w-3xl mb-6 flex items-start justify-between gap-4">
             <div className="text-left">
               <p className="game-tight-label">Lobby</p>
-              <h1 className="game-title text-left leading-tight">{lobbyName ?? '...'}</h1>
+              <h1 className="game-title text-left leading-tight">
+                {lobbyName ?? '...'}
+              </h1>
             </div>
             <div className="game-box shrink-0 text-right min-w-[11rem]">
               <p className="game-tight-label">Role</p>
               <div className="flex items-center justify-end gap-2">
-                <p className="font-semibold text-slate-100">{roleDisplayName}</p>
+                <p className="font-semibold text-slate-100">
+                  {roleDisplayName}
+                </p>
                 {renderRoleInfo()}
               </div>
             </div>
@@ -729,28 +824,58 @@ export default function LobbyGamePage() {
                 selfAlive ? (
                   <button
                     type="button"
-                    className="game-button-secondary max-w-xs mx-auto"
+                    className={[
+                      'game-button-secondary max-w-xs mx-auto',
+                      trapperAlertActive
+                        ? 'game-button-alert-active'
+                        : trapperAlertsRemaining > 0
+                          ? 'game-button-alert-ready'
+                          : '',
+                      'disabled:cursor-not-allowed disabled:opacity-100',
+                    ].join(' ')}
                     disabled={
                       currentPhase !== 'night' ||
-                      trapperAlertActive ||
-                      trapperAlertsRemaining <= 0
+                      (!trapperAlertActive && trapperAlertsRemaining <= 0)
                     }
                     onClick={() => {
                       if (!lobbyName || currentPhase !== 'night') return;
                       toggleTrapperAlert(lobbyName);
                     }}
                   >
-                    {trapperAlertActive
-                      ? 'Alert Active'
-                      : trapperAlertsRemaining <= 0
-                        ? 'No Alerts Remaining'
-                        : 'Activate Alert'}
+                    {trapperAlertActive ? (
+                      <span className="flex flex-col items-center justify-center leading-tight">
+                        <span className="inline-flex items-center justify-center gap-2">
+                          <span className="relative flex h-2.5 w-2.5">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white/70 opacity-75" />
+                            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
+                          </span>
+                          Alert Active
+                        </span>
+                        <span className="mt-1 text-[11px] font-semibold text-emerald-100/90">
+                          Click to deactivate
+                        </span>
+                      </span>
+                    ) : trapperAlertsRemaining <= 0 ? (
+                      <span className="flex flex-col items-center justify-center leading-tight">
+                        <span>No Alerts Remaining</span>
+                      </span>
+                    ) : (
+                      <span className="flex flex-col items-center justify-center leading-tight">
+                        <span>Activate Alert</span>
+                        <span className="mt-1 text-[11px] font-semibold text-emerald-100/90">
+                          {trapperAlertsRemaining} left
+                        </span>
+                      </span>
+                    )}
                   </button>
                 ) : null}
               </div>
             </div>
 
-            <PlayerList members={sortedMembers} renderMemberRow={renderMemberRow} />
+            <PlayerList
+              members={sortedMembers}
+              renderMemberRow={renderMemberRow}
+            />
             <EliminationResultsCard
               currentPhase={currentPhase}
               eliminationResultsKey={eliminationResultsKey}
@@ -760,14 +885,18 @@ export default function LobbyGamePage() {
           </div>
         </div>
       )}
-      {currentPhase !== 'nightResults' ? (
+      {currentPhase !== 'nightResults' &&
+      currentPhase !== 'endGame' &&
+      currentPhase !== 'gameResults' ? (
         <GameChat
           lobbyName={typeof lobbyName === 'string' ? lobbyName : undefined}
           refreshKey={chatRefreshKey}
           currentUserId={session?.user?.id}
         />
       ) : null}
-      {currentPhase !== 'roleReveal' ? (
+      {currentPhase !== 'roleReveal' &&
+      currentPhase !== 'endGame' &&
+      currentPhase !== 'gameResults' ? (
         <GameNotebook
           lobbyName={typeof lobbyName === 'string' ? lobbyName : undefined}
           userId={session?.user?.id}
@@ -779,7 +908,10 @@ export default function LobbyGamePage() {
         />
       ) : null}
       {viewingNotebook ? (
-        <NotebookModal notebook={viewingNotebook} onClose={() => setViewingNotebook(null)} />
+        <NotebookModal
+          notebook={viewingNotebook}
+          onClose={() => setViewingNotebook(null)}
+        />
       ) : null}
       <div
         key={phaseOverlayState.key}
@@ -792,7 +924,12 @@ export default function LobbyGamePage() {
               : 'opacity-0',
         ].join(' ')}
       />
+      {currentPhase === 'gameResults' ? (
+        <div
+          key="results-route-fadeout"
+          className="pointer-events-none fixed inset-0 z-50 bg-black phase-overlay-fade-out"
+        />
+      ) : null}
     </>
   );
 }
-

@@ -101,6 +101,19 @@ body {
     transition shadow-xl;
   }
 
+  .game-button-alert-ready {
+    @apply bg-gradient-to-r from-emerald-500/20 to-lime-500/10
+           border-emerald-500/40
+           hover:from-emerald-500/30 hover:to-lime-500/20
+           focus:outline-none focus:ring-2 focus:ring-emerald-400;
+  }
+
+  .game-button-alert-active {
+    @apply bg-gradient-to-r from-emerald-500 via-emerald-600 to-lime-600
+           border-emerald-300/50 shadow-emerald-500/20 ring-2 ring-emerald-300/60
+           focus:outline-none focus:ring-2 focus:ring-emerald-300;
+  }
+
   .sign-out-button {
     @apply w-auto px-3 py-1 text-sm rounded-lg font-semibold text-white
     bg-slate-800/70 border border-slate-700 hover:bg-slate-800

@@ -2,6 +2,46 @@ import { getRoleDisplayName, ROLES } from '@/models/roles';
 import type { Role } from '@/models/roles';
 import type { LobbySettingsProps } from '@/models/lobby';
 import DurationStepper from './DurationStepper';
+import { useState } from 'react';
+
+function RoleInfoPopover({ role }: { role: Role }) {
+  const [pinnedOpen, setPinnedOpen] = useState(false);
+  const [hovered, setHovered] = useState(false);
+  const open = pinnedOpen || hovered;
+  const roleDisplayName = getRoleDisplayName(role);
+
+  return (
+    <div className="relative inline-flex items-center z-40">
+      <button
+        type="button"
+        aria-label={`${roleDisplayName} role info`}
+        aria-expanded={open}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-500/60 text-[11px] font-bold text-slate-200 hover:bg-slate-700/60 focus:outline-none focus:ring-2 focus:ring-sky-400"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onFocus={() => setHovered(true)}
+        onBlur={() => setHovered(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') setPinnedOpen(false);
+        }}
+        onClick={() => setPinnedOpen((prev) => !prev)}
+      >
+        i
+      </button>
+      <div
+        className={[
+          'pointer-events-auto absolute right-0 top-full z-[999] mt-2 w-64 max-w-[calc(100vw-1rem)] rounded-md border border-slate-600 bg-slate-900/95 p-2 text-left text-xs text-slate-200 shadow-lg transition-opacity',
+          open ? 'opacity-100' : 'opacity-0',
+        ].join(' ')}
+      >
+        <p className="leading-tight">{ROLES[role].ability}</p>
+        <p className="mt-1 leading-tight text-amber-300">
+          Win: {ROLES[role].winCondition}
+        </p>
+      </div>
+    </div>
+  );
+}
 
 export default function LobbySettings({
   isHost,
@@ -30,26 +70,7 @@ export default function LobbySettings({
       (neutralRolesEnabled || ROLES[role].faction !== 'Neutral'),
   );
 
-  const renderRoleInfo = (role: Role) => {
-    const roleDisplayName = getRoleDisplayName(role);
-    return (
-    <div className="relative inline-flex items-center group z-40">
-      <button
-        type="button"
-        aria-label={`${roleDisplayName} role info`}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-500/60 text-[11px] font-bold text-slate-200 hover:bg-slate-700/60"
-      >
-        i
-      </button>
-      <div className="pointer-events-auto absolute right-0 top-full z-[999] mt-2 w-64 max-w-[calc(100vw-1rem)] rounded-md border border-slate-600 bg-slate-900/95 p-2 text-left text-xs text-slate-200 opacity-0 shadow-lg transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-        <p className="leading-tight">{ROLES[role].ability}</p>
-        <p className="mt-1 leading-tight text-amber-300">
-          Win: {ROLES[role].winCondition}
-        </p>
-      </div>
-    </div>
-    );
-  };
+  const renderRoleInfo = (role: Role) => <RoleInfoPopover role={role} />;
 
   return (
     <div className="space-y-3">

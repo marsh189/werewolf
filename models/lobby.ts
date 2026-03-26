@@ -16,6 +16,21 @@ export type NightDeathReveal = {
   notebook: string;
 };
 
+export type GameResultsPlayer = {
+  userId: string;
+  name: string;
+  role: string | null;
+  faction: 'Village' | 'Enemy' | 'Neutral' | null;
+  alive: boolean;
+  eliminationSummary: string | null;
+};
+
+export type GameResults = {
+  winningFaction: 'Village';
+  endedAt: number;
+  players: GameResultsPlayer[];
+};
+
 export type EliminationResult =
   | {
       userId: string;
@@ -46,12 +61,15 @@ export type LobbyView = {
     | 'nightActionResults'
     | 'nightResults'
     | 'vote'
-    | 'eliminationResults';
+    | 'eliminationResults'
+    | 'endGame'
+    | 'gameResults';
   dayNumber: number | null;
   nightNumber: number | null;
   phaseEndsAt: number | null;
   currentNightDeathReveal: NightDeathReveal | null;
   currentEliminationResult: EliminationResult | null;
+  gameResults: GameResults | null;
 };
 
 export type LobbyListItem = {

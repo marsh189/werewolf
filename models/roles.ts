@@ -17,8 +17,8 @@ export const ROLES = {
   Villager: {
     faction: 'Village',
     category: 'Basic',
-    ability: 'No night action. Use discussion and voting to find enemies.',
-    nightInstruction: 'You have no night action tonight.',
+    ability: 'No special ability.',
+    nightInstruction: 'You have no night action. Discuss and vote during the day.',
     winCondition: 'Village wins when all werewolves are eliminated.',
     revealSummary: 'A steady voice in the dark. Read the room, sway the vote, and expose the pack.',
   },

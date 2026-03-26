@@ -26,8 +26,11 @@ export default function Lobby() {
     const name =
       typeof lobbyName === 'string' ? lobbyName : lobbyInfo.lobbyName;
     if (!name) return;
+    if (lobbyInfo.gamePhase === 'endGame' || lobbyInfo.gamePhase === 'gameResults') {
+      return;
+    }
     router.push(`/lobby/${encodeURIComponent(name)}/game`);
-  }, [lobbyInfo?.started, lobbyInfo?.lobbyName, lobbyName, router]);
+  }, [lobbyInfo?.started, lobbyInfo?.lobbyName, lobbyInfo?.gamePhase, lobbyName, router]);
 
   useEffect(() => {
     if (!lobbyInfo?.startingAt) return;
@@ -42,6 +45,12 @@ export default function Lobby() {
       clearInterval(id);
     };
   }, [lobbyInfo?.startingAt]);
+
+  useEffect(() => {
+    if (!lobbyName) return;
+    if (!socket.connected) socket.connect();
+    socket.emit('presence:setView', { lobbyName, view: 'lobby' });
+  }, [lobbyName]);
 
   const startingRemainingSeconds = lobbyInfo?.startingAt && nowMs !== null
     ? Math.max(0, Math.ceil((lobbyInfo.startingAt - nowMs) / 1000))
@@ -144,14 +153,14 @@ export default function Lobby() {
             </div>
           )}
 
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:gap-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-[calc(100vh-12rem)]">
             <div className="w-full lg:w-1/3 flex flex-col gap-4">
               <LobbyMembersList
                 members={lobbyInfo?.members ?? []}
                 hostUserId={lobbyInfo?.hostUserId ?? ''}
               />
 
-              <div className="pt-2 space-y-2">
+              <div className="pt-2 space-y-2 mt-auto">
                 {sessionStatus === 'loading' && (
                   <div className="text-xs text-slate-400">
                     Checking session...
@@ -170,7 +179,7 @@ export default function Lobby() {
               </div>
             </div>
 
-            <div className="hidden lg:block w-px bg-gradient-to-b from-transparent via-sky-400/60 to-transparent" />
+            <div className="hidden lg:block lg:self-stretch w-px bg-gradient-to-b from-transparent via-sky-400/60 to-transparent" />
 
             <div className="w-full lg:w-2/3 lg:pl-6 flex flex-col">
               <div className="flex items-center justify-between">
@@ -200,7 +209,7 @@ export default function Lobby() {
                 />
               </div>
 
-              <div className="pt-4 space-y-2">
+              <div className="pt-4 space-y-2 mt-auto">
                 {sessionStatus === 'loading' && (
                   <div className="text-xs text-slate-400">
                     Checking session...

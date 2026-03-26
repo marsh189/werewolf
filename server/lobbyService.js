@@ -58,6 +58,7 @@ const clearPlayerGameData = (lobby) => {
   lobby.playerNotebooks = new Map();
   lobby.eliminatedUserIds = new Set();
   lobby.publicEliminatedUserIds = new Set();
+  lobby.eliminationInfoByUserId = new Map();
 };
 
 const createInitialRoleState = (role) => ({
@@ -68,6 +69,9 @@ const createInitialRoleState = (role) => ({
 });
 
 export const resetGameState = (lobby, { resetPlayers = true } = {}) => {
+  lobby.gameResults = null;
+  lobby.eliminationInfoByUserId = new Map();
+  lobby.inGameUserCounts = new Map();
   clearRoundState(lobby);
   resetLobbyChat(lobby);
   if (resetPlayers) {
@@ -90,6 +94,7 @@ export const createLobby = (name, hostUser) => {
     gamePhase: 'lobby',
     revealTimeoutId: null,
     phaseTimeoutId: null,
+    inGameUserCounts: new Map(),
     members: new Map(),
   };
   resetGameState(lobby, { resetPlayers: true });
@@ -117,6 +122,7 @@ export const buildLobbyInfo = (lobby) => {
     phaseEndsAt: lobby.phaseEndsAt ?? null,
     currentNightDeathReveal: lobby.currentNightDeathReveal ?? null,
     currentEliminationResult: lobby.currentEliminationResult ?? null,
+    gameResults: lobby.gameResults ?? null,
   };
 };
 
@@ -456,6 +462,8 @@ const schedulePhaseTransition = (io, lobby, durationMs, onComplete) => {
   }, durationMs);
 };
 
+const END_GAME_PHASE_DURATION_MS = 10 * 1000;
+
 const isVillageRole = (role) =>
   role !== 'Werewolf' &&
   role !== 'AlphaWolf' &&
@@ -491,6 +499,77 @@ const isWerewolfRole = (role) =>
   role === 'Cursed' ||
   role === 'Snatcher' ||
   role === 'Mimic';
+
+const getFactionForRole = (role) => {
+  if (!role) return null;
+  if (isWerewolfRole(role)) return 'Enemy';
+  if (role === 'Jester' || role === 'Executioner') return 'Neutral';
+  return 'Village';
+};
+
+const setEliminationInfo = (lobby, userId, info) => {
+  if (!userId) return;
+  if (!lobby.eliminationInfoByUserId) {
+    lobby.eliminationInfoByUserId = new Map();
+  }
+  lobby.eliminationInfoByUserId.set(userId, {
+    at: Date.now(),
+    ...info,
+  });
+};
+
+const buildGameResultsSnapshot = (lobby) => {
+  const players = Array.from(lobby.members.values()).map((member) => {
+    const role = lobby.playerRoles?.get(member.userId) ?? null;
+    const eliminationSummary =
+      lobby.eliminationInfoByUserId?.get(member.userId)?.summary ?? null;
+    return {
+      userId: member.userId,
+      name: member.name,
+      role,
+      faction: getFactionForRole(role),
+      alive: !lobby.eliminatedUserIds?.has(member.userId),
+      eliminationSummary,
+    };
+  });
+  return {
+    winningFaction: 'Village',
+    endedAt: Date.now(),
+    players,
+  };
+};
+
+const getAliveWerewolfCount = (lobby) =>
+  Array.from(lobby.playerRoles?.entries() ?? []).filter(
+    ([userId, role]) =>
+      lobby.members?.has(userId) &&
+      !lobby.eliminatedUserIds?.has(userId) &&
+      isWerewolfRole(role),
+  ).length;
+
+const startVillageVictoryPhase = (io, lobby) => {
+  if (lobby.gameResults) return;
+  lobby.gamePhase = 'endGame';
+  lobby.currentNightDeathReveal = null;
+  lobby.currentEliminationResult = null;
+  lobby.gameResults = buildGameResultsSnapshot(lobby);
+
+  schedulePhaseTransition(io, lobby, END_GAME_PHASE_DURATION_MS, () => {
+    lobby.gamePhase = 'gameResults';
+    lobby.phaseEndsAt = null;
+    emitLobbyUpdate(io, lobby);
+  });
+  emitLobbyUpdate(io, lobby);
+};
+
+const maybeTriggerVillageWin = (io, lobby) => {
+  if (!lobby?.started) return false;
+  if (lobby.gameResults) return false;
+  if (lobby.gamePhase === 'endGame' || lobby.gamePhase === 'gameResults') return false;
+  if (getAliveWerewolfCount(lobby) !== 0) return false;
+  startVillageVictoryPhase(io, lobby);
+  return true;
+};
 
 const hasNightAction = (role) =>
   role === 'Doctor' ||
@@ -727,6 +806,7 @@ const startNightPhase = (io, lobby, nightNumber) => {
         ),
       );
       const deaths = new Set();
+      const eliminationSummaryByUserId = new Map();
       const blockedByEscort = new Set();
       const blockedBySnatcher = new Set();
       const attackedTargetIds = new Set();
@@ -734,6 +814,12 @@ const startNightPhase = (io, lobby, nightNumber) => {
       const visitsByUserId = new Map();
       const visitorsByTargetUserId = new Map();
       const disguisedRoleByUserId = new Map();
+
+      const setNightEliminationSummary = (userId, summary) => {
+        if (!userId || !summary) return;
+        if (eliminationSummaryByUserId.has(userId)) return;
+        eliminationSummaryByUserId.set(userId, summary);
+      };
 
       const addVisit = (visitorUserId, targetUserId) => {
         if (!visitorUserId || !targetUserId) return;
@@ -858,6 +944,7 @@ const startNightPhase = (io, lobby, nightNumber) => {
             const randomWerewolfId =
               aliveWerewolfIds[Math.floor(Math.random() * aliveWerewolfIds.length)];
             deaths.add(randomWerewolfId);
+            setNightEliminationSummary(randomWerewolfId, 'Killed by the Trapper.');
           }
         } else if (!doctorProtectedUserIds.has(alphaWolfTargetId)) {
           const bodyguardGuardUserId = findBodyguardGuardForTarget(
@@ -866,7 +953,18 @@ const startNightPhase = (io, lobby, nightNumber) => {
             aliveAtNightStart,
             new Set([...blockedByEscort, ...blockedBySnatcher]),
           );
-          deaths.add(bodyguardGuardUserId ?? alphaWolfTargetId);
+          const resolvedVictimUserId = bodyguardGuardUserId ?? alphaWolfTargetId;
+          deaths.add(resolvedVictimUserId);
+          if (bodyguardGuardUserId) {
+            const targetName =
+              lobby.members.get(alphaWolfTargetId)?.name ?? 'their target';
+            setNightEliminationSummary(
+              resolvedVictimUserId,
+              `Killed protecting ${targetName} (Alpha Wolf attack).`,
+            );
+          } else {
+            setNightEliminationSummary(resolvedVictimUserId, 'Killed by the Alpha Wolf.');
+          }
         }
       }
 
@@ -890,6 +988,7 @@ const startNightPhase = (io, lobby, nightNumber) => {
           const randomWerewolfId =
             aliveWerewolfIds[Math.floor(Math.random() * aliveWerewolfIds.length)];
           deaths.add(randomWerewolfId);
+          setNightEliminationSummary(randomWerewolfId, 'Killed by the Trapper.');
         }
       } else if (
         !canAlphaKill &&
@@ -914,7 +1013,18 @@ const startNightPhase = (io, lobby, nightNumber) => {
             aliveAtNightStart,
             new Set([...blockedByEscort, ...blockedBySnatcher]),
           );
-          deaths.add(bodyguardGuardUserId ?? werewolfTargetId);
+          const resolvedVictimUserId = bodyguardGuardUserId ?? werewolfTargetId;
+          deaths.add(resolvedVictimUserId);
+          if (bodyguardGuardUserId) {
+            const targetName =
+              lobby.members.get(werewolfTargetId)?.name ?? 'their target';
+            setNightEliminationSummary(
+              resolvedVictimUserId,
+              `Killed protecting ${targetName} (werewolf attack).`,
+            );
+          } else {
+            setNightEliminationSummary(resolvedVictimUserId, 'Killed by a werewolf.');
+          }
         }
       }
 
@@ -940,6 +1050,7 @@ const startNightPhase = (io, lobby, nightNumber) => {
 
         if (alertedTrappers.has(targetUserId)) {
           deaths.add(hunterUserId);
+          setNightEliminationSummary(hunterUserId, 'Killed by the Trapper.');
           continue;
         }
 
@@ -952,9 +1063,19 @@ const startNightPhase = (io, lobby, nightNumber) => {
           );
           const resolvedVictimUserId = bodyguardGuardUserId ?? targetUserId;
           deaths.add(resolvedVictimUserId);
+          if (bodyguardGuardUserId) {
+            const targetName = lobby.members.get(targetUserId)?.name ?? 'their target';
+            setNightEliminationSummary(
+              resolvedVictimUserId,
+              `Shot protecting ${targetName} (Hunter shot).`,
+            );
+          } else {
+            setNightEliminationSummary(resolvedVictimUserId, 'Shot by the Hunter.');
+          }
           const resolvedVictimRole = lobby.playerRoles.get(resolvedVictimUserId);
           if (isVillageRole(resolvedVictimRole)) {
             deaths.add(hunterUserId);
+            setNightEliminationSummary(hunterUserId, 'Died from guilt.');
           }
         }
       }
@@ -1028,6 +1149,10 @@ const startNightPhase = (io, lobby, nightNumber) => {
       }
 
       for (const userId of deaths) {
+        setEliminationInfo(lobby, userId, {
+          kind: 'night',
+          summary: eliminationSummaryByUserId.get(userId) ?? 'Killed during the night.',
+        });
         addNightDeathReveal(lobby, userId);
       }
 
@@ -1367,6 +1492,7 @@ const startNightResultsPhase = (io, lobby) => {
     lobby.gamePhase = 'nightResults';
     lobby.currentNightDeathReveal = null;
     schedulePhaseTransition(io, lobby, NIGHT_DEATH_REVEAL_DURATION_MS, () => {
+      if (maybeTriggerVillageWin(io, lobby)) return;
       startDayPhase(io, lobby, (lobby.dayNumber ?? 0) + 1);
     });
     emitLobbyUpdate(io, lobby);
@@ -1392,6 +1518,7 @@ const startNightResultsPhase = (io, lobby) => {
       }
       lobby.pendingNightDeathReveals = [];
       lobby.currentNightDeathReveal = null;
+      if (maybeTriggerVillageWin(io, lobby)) return;
       startDayPhase(io, lobby, (lobby.dayNumber ?? 0) + 1);
     });
     emitLobbyUpdate(io, lobby);
@@ -1405,6 +1532,7 @@ const startEliminationResultsPhase = (io, lobby) => {
   lobby.currentNightDeathReveal = null;
   schedulePhaseTransition(io, lobby, ELIMINATION_RESULTS_DURATION_MS, () => {
     lobby.currentEliminationResult = null;
+    if (maybeTriggerVillageWin(io, lobby)) return;
     startNightPhase(io, lobby, (lobby.nightNumber ?? 0) + 1);
   });
   emitLobbyUpdate(io, lobby);
@@ -1437,6 +1565,10 @@ const startVotePhase = (io, lobby) => {
 
       if (!tie && topTargetId && lobby.members.has(topTargetId) && !lobby.eliminatedUserIds.has(topTargetId)) {
         lobby.eliminatedUserIds.add(topTargetId);
+        setEliminationInfo(lobby, topTargetId, {
+          kind: 'vote',
+          summary: 'Voted out by the village.',
+        });
         if (!lobby.publicEliminatedUserIds) {
           lobby.publicEliminatedUserIds = new Set();
         }
@@ -1488,6 +1620,8 @@ export const scheduleGameStart = (io, lobby) => {
   clearRoundState(lobby);
   lobby.eliminatedUserIds = new Set();
   lobby.publicEliminatedUserIds = new Set();
+  lobby.eliminationInfoByUserId = new Map();
+  lobby.inGameUserCounts = new Map();
 
   if (lobby.startTimeoutId) clearTimeout(lobby.startTimeoutId);
 
@@ -1658,6 +1792,13 @@ export const leaveLobby = (io, socket, lobbyName) => {
 export const joinLobby = (io, socket, lobby) => {
   const user = socket.data.user;
   lobby.members.set(user.id, createMember(user, socket.id));
+  if (lobby.disconnectCleanupTimers?.has(user.id)) {
+    clearTimeout(lobby.disconnectCleanupTimers.get(user.id));
+    lobby.disconnectCleanupTimers.delete(user.id);
+  }
+  if (!lobby.inGameUserCounts) {
+    lobby.inGameUserCounts = new Map();
+  }
   setLobby(lobby.name, lobby);
   setUserLobby(user.id, lobby.name);
 
@@ -1667,4 +1808,41 @@ export const joinLobby = (io, socket, lobby) => {
 
   emitLobbyUpdate(io, lobby);
   emitLobbiesList(io);
+};
+
+export const removeUserFromLobby = (io, lobbyName, userId) => {
+  if (!lobbyName || !userId) return false;
+
+  const lobby = getLobby(lobbyName);
+  if (!lobby) return false;
+
+  lobby.members.delete(userId);
+  lobby.eliminatedUserIds?.delete(userId);
+  lobby.publicEliminatedUserIds?.delete(userId);
+  lobby.playerNotebooks?.delete(userId);
+  lobby.playerRoles?.delete?.(userId);
+  lobby.playerRoleState?.delete?.(userId);
+  lobby.currentVotes?.delete?.(userId);
+  lobby.disconnectCleanupTimers?.delete?.(userId);
+
+  deleteUserLobby(userId);
+
+  if (lobby.members.size === 0) {
+    clearLobbyTimeouts(lobby);
+    deleteLobby(lobbyName);
+    emitLobbiesList(io);
+    return true;
+  }
+
+  if (
+    lobby.hostUserId === userId &&
+    lobby.members.size > 0 &&
+    lobby.members.values().next()
+  ) {
+    lobby.hostUserId = lobby.members.values().next().value.userId;
+  }
+
+  emitLobbiesList(io);
+  emitLobbyUpdate(io, lobby);
+  return true;
 };

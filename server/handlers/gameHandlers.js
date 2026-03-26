@@ -107,7 +107,8 @@ export const registerGameHandlers = ({ io, socket, user }) => {
         currentEliminationResult: lobby.currentEliminationResult ?? null,
         role: myRole,
         werewolfUserIds,
-        hunterShotsRemaining: myRole === 'Hunter' ? (myRoleState.hunterShotsRemaining ?? 0) : null,
+        hunterShotsRemaining:
+          myRole === 'Hunter' ? (myRoleState.hunterShotsRemaining ?? 0) : null,
         trapperAlertsRemaining: myRole === 'Trapper' ? (myRoleState.trapperAlertsRemaining ?? 0) : null,
         trapperAlertActive:
           myRole === 'Trapper'
@@ -175,14 +176,18 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       return ack({ ok: false, error: 'Dead players cannot act' });
     }
     const myRole = lobby.playerRoles.get(user.id);
-    if (myRole !== 'Werewolf' && myRole !== 'AlphaWolf' && myRole !== 'Hunter') {
+    if (
+      myRole !== 'Werewolf' &&
+      myRole !== 'AlphaWolf' &&
+      myRole !== 'Hunter'
+    ) {
       return ack({ ok: false, error: 'Your role cannot perform a night kill' });
     }
     if (myRole === 'AlphaWolf' && targetUserId === user.id) {
       return ack({ ok: false, error: 'Alpha Wolf cannot target themselves' });
     }
     if (myRole === 'Hunter' && targetUserId === user.id) {
-      return ack({ ok: false, error: 'Hunter cannot target themselves' });
+      return ack({ ok: false, error: 'You cannot target yourself' });
     }
     if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
       return ack({ ok: false, error: 'Target must be alive and in lobby' });
@@ -660,22 +665,36 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     if (isRapidAction(lobby, user.id, 'toggleTrapperAlert')) {
       return ack({ ok: true, throttled: true });
     }
-    const myRoleState = lobby.playerRoleState?.get(user.id);
-    if ((myRoleState?.trapperAlertsRemaining ?? 0) <= 0) {
-      return ack({ ok: false, error: 'No Trapper alerts remaining' });
-    }
+
     if (!lobby.pendingTrapperAlertUserIds) {
       lobby.pendingTrapperAlertUserIds = new Set();
     }
-    if (lobby.pendingTrapperAlertUserIds.has(user.id)) {
-      return ack({ ok: false, error: 'Trapper alert already active for this night' });
+
+    const currentlyActive = lobby.pendingTrapperAlertUserIds.has(user.id);
+    const myRoleState = lobby.playerRoleState?.get(user.id) ?? {
+      hunterShotsRemaining: 0,
+      trapperAlertsRemaining: 0,
+      doctorSelfProtectUsed: false,
+      executionerTargetUserId: null,
+    };
+
+    if (currentlyActive) {
+      lobby.pendingTrapperAlertUserIds.delete(user.id);
+      myRoleState.trapperAlertsRemaining += 1;
+      lobby.playerRoleState?.set(user.id, myRoleState);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, active: false });
+    }
+
+    if ((myRoleState?.trapperAlertsRemaining ?? 0) <= 0) {
+      return ack({ ok: false, error: 'No Trapper alerts remaining' });
     }
 
     myRoleState.trapperAlertsRemaining -= 1;
     lobby.playerRoleState?.set(user.id, myRoleState);
     lobby.pendingTrapperAlertUserIds.add(user.id);
     emitLobbyUpdate(io, lobby);
-    return ack({ ok: true });
+    return ack({ ok: true, active: true });
   });
 
   socket.on('game:castVote', (data, callback) => {
@@ -759,6 +778,7 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     if (eliminated === false) {
       lobby.eliminatedUserIds.delete(targetUserId);
       lobby.publicEliminatedUserIds.delete(targetUserId);
+      lobby.eliminationInfoByUserId?.delete(targetUserId);
       if (cause === 'night') {
         lobby.pendingNightDeathReveals = lobby.pendingNightDeathReveals.filter(
           (entry) => entry.userId !== targetUserId,
@@ -767,6 +787,14 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     } else {
       lobby.eliminatedUserIds.add(targetUserId);
       if (cause === 'night') {
+        if (!lobby.eliminationInfoByUserId) {
+          lobby.eliminationInfoByUserId = new Map();
+        }
+        lobby.eliminationInfoByUserId.set(targetUserId, {
+          at: Date.now(),
+          kind: 'host',
+          summary: 'Killed during the night.',
+        });
         convertExecutionersToJesterForNightDeaths(lobby, [targetUserId]);
         const addedReveal = addNightDeathReveal(lobby, targetUserId);
         if (!addedReveal) {
@@ -786,6 +814,14 @@ export const registerGameHandlers = ({ io, socket, user }) => {
           }
         }
       } else {
+        if (!lobby.eliminationInfoByUserId) {
+          lobby.eliminationInfoByUserId = new Map();
+        }
+        lobby.eliminationInfoByUserId.set(targetUserId, {
+          at: Date.now(),
+          kind: 'host',
+          summary: 'Eliminated by the host.',
+        });
         lobby.publicEliminatedUserIds.add(targetUserId);
       }
     }

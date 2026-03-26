@@ -8,7 +8,9 @@ export type GamePhase =
   | 'nightActionResults'
   | 'nightResults'
   | 'vote'
-  | 'eliminationResults';
+  | 'eliminationResults'
+  | 'endGame'
+  | 'gameResults';
 
 export type GameInitResponse = {
   ok: boolean;
