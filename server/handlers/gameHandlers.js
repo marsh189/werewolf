@@ -198,12 +198,20 @@ export const registerGameHandlers = ({ io, socket, user }) => {
 
     if (myRole === 'AlphaWolf') {
       if (lobby.pendingAlphaWolfKillTargetId === targetUserId) {
-        return ack({ ok: true, unchanged: true });
+        lobby.pendingAlphaWolfKillTargetId = null;
+        emitLobbyUpdate(io, lobby);
+        return ack({ ok: true, cleared: true });
       }
       lobby.pendingAlphaWolfKillTargetId = targetUserId;
     } else if (myRole === 'Werewolf') {
-      if (lobby.pendingWerewolfKillTargetId === targetUserId) {
-        return ack({ ok: true, unchanged: true });
+      if (
+        lobby.pendingWerewolfKillTargetId === targetUserId &&
+        lobby.pendingWerewolfKillActorUserId === user.id
+      ) {
+        lobby.pendingWerewolfKillTargetId = null;
+        lobby.pendingWerewolfKillActorUserId = null;
+        emitLobbyUpdate(io, lobby);
+        return ack({ ok: true, cleared: true });
       }
       lobby.pendingWerewolfKillTargetId = targetUserId;
       lobby.pendingWerewolfKillActorUserId = user.id;
@@ -216,7 +224,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
         return ack({ ok: false, error: 'No Hunter shots remaining' });
       }
       if (lobby.pendingHunterKillTargets.get(user.id) === targetUserId) {
-        return ack({ ok: true, unchanged: true });
+        lobby.pendingHunterKillTargets.delete(user.id);
+        emitLobbyUpdate(io, lobby);
+        return ack({ ok: true, cleared: true });
       }
       lobby.pendingHunterKillTargets.set(user.id, targetUserId);
     }
@@ -253,7 +263,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       lobby.pendingFramerTargets = new Map();
     }
     if (lobby.pendingFramerTargets.get(user.id) === targetUserId) {
-      return ack({ ok: true, unchanged: true });
+      lobby.pendingFramerTargets.delete(user.id);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, cleared: true });
     }
     lobby.pendingFramerTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
@@ -292,7 +304,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       lobby.pendingProwlerTargets = new Map();
     }
     if (lobby.pendingProwlerTargets.get(user.id) === targetUserId) {
-      return ack({ ok: true, unchanged: true });
+      lobby.pendingProwlerTargets.delete(user.id);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, cleared: true });
     }
     lobby.pendingProwlerTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
@@ -331,7 +345,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       lobby.pendingSnatcherTargets = new Map();
     }
     if (lobby.pendingSnatcherTargets.get(user.id) === targetUserId) {
-      return ack({ ok: true, unchanged: true });
+      lobby.pendingSnatcherTargets.delete(user.id);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, cleared: true });
     }
     lobby.pendingSnatcherTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
@@ -367,7 +383,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       lobby.pendingCursedTargets = new Map();
     }
     if (lobby.pendingCursedTargets.get(user.id) === targetUserId) {
-      return ack({ ok: true, unchanged: true });
+      lobby.pendingCursedTargets.delete(user.id);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, cleared: true });
     }
     lobby.pendingCursedTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
@@ -406,7 +424,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       lobby.pendingMimicTargets = new Map();
     }
     if (lobby.pendingMimicTargets.get(user.id) === targetUserId) {
-      return ack({ ok: true, unchanged: true });
+      lobby.pendingMimicTargets.delete(user.id);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, cleared: true });
     }
     lobby.pendingMimicTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
@@ -445,7 +465,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       lobby.pendingEscortVisitTargets = new Map();
     }
     if (lobby.pendingEscortVisitTargets.get(user.id) === targetUserId) {
-      return ack({ ok: true, unchanged: true });
+      lobby.pendingEscortVisitTargets.delete(user.id);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, cleared: true });
     }
     lobby.pendingEscortVisitTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
@@ -484,7 +506,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       lobby.pendingBodyguardGuardTargets = new Map();
     }
     if (lobby.pendingBodyguardGuardTargets.get(user.id) === targetUserId) {
-      return ack({ ok: true, unchanged: true });
+      lobby.pendingBodyguardGuardTargets.delete(user.id);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, cleared: true });
     }
     lobby.pendingBodyguardGuardTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
@@ -515,18 +539,20 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     if (isRapidAction(lobby, user.id, 'doctorProtect')) {
       return ack({ ok: true, throttled: true });
     }
+    if (!lobby.pendingDoctorProtectTargets) {
+      lobby.pendingDoctorProtectTargets = new Map();
+    }
+    if (lobby.pendingDoctorProtectTargets.get(user.id) === targetUserId) {
+      lobby.pendingDoctorProtectTargets.delete(user.id);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, cleared: true });
+    }
+
     if (targetUserId === user.id) {
       const myRoleState = lobby.playerRoleState?.get(user.id) ?? {};
       if (myRoleState.doctorSelfProtectUsed === true) {
         return ack({ ok: false, error: 'Doctor can only self-protect once per game' });
       }
-    }
-
-    if (!lobby.pendingDoctorProtectTargets) {
-      lobby.pendingDoctorProtectTargets = new Map();
-    }
-    if (lobby.pendingDoctorProtectTargets.get(user.id) === targetUserId) {
-      return ack({ ok: true, unchanged: true });
     }
     lobby.pendingDoctorProtectTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
@@ -565,7 +591,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       lobby.pendingTrackerWatchTargets = new Map();
     }
     if (lobby.pendingTrackerWatchTargets.get(user.id) === targetUserId) {
-      return ack({ ok: true, unchanged: true });
+      lobby.pendingTrackerWatchTargets.delete(user.id);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, cleared: true });
     }
     lobby.pendingTrackerWatchTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
@@ -601,7 +629,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       lobby.pendingLookoutWatchTargets = new Map();
     }
     if (lobby.pendingLookoutWatchTargets.get(user.id) === targetUserId) {
-      return ack({ ok: true, unchanged: true });
+      lobby.pendingLookoutWatchTargets.delete(user.id);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, cleared: true });
     }
     lobby.pendingLookoutWatchTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);
@@ -640,7 +670,9 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       lobby.pendingInvestigatorVisitTargets = new Map();
     }
     if (lobby.pendingInvestigatorVisitTargets.get(user.id) === targetUserId) {
-      return ack({ ok: true, unchanged: true });
+      lobby.pendingInvestigatorVisitTargets.delete(user.id);
+      emitLobbyUpdate(io, lobby);
+      return ack({ ok: true, cleared: true });
     }
     lobby.pendingInvestigatorVisitTargets.set(user.id, targetUserId);
     emitLobbyUpdate(io, lobby);

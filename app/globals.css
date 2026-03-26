@@ -9,6 +9,8 @@
 
 html {
   min-height: 100%;
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
   background: linear-gradient(
     135deg,
     #020617 0%,
@@ -20,10 +22,17 @@ html {
   background-attachment: fixed;
 }
 
+@media (max-width: 640px) {
+  html {
+    background-attachment: scroll;
+  }
+}
+
 body {
   min-height: 100%;
   @apply text-white antialiased;
   background: transparent;
+  overflow-x: hidden;
   font-family:
     system-ui,
     -apple-system,
@@ -47,12 +56,12 @@ body {
   }
 
   .game-card-glow {
-    @apply p-[1px] rounded-3xl bg-slate-900/90 backdrop-blur-xl px-8 py-10 border border-white/10;
+    @apply p-[1px] rounded-3xl bg-slate-900/90 backdrop-blur-xl px-5 py-6 sm:px-8 sm:py-10 border border-white/10;
   }
 
   /* ---------- Headings ---------- */
   .game-title {
-    @apply text-3xl font-extrabold text-center
+    @apply text-2xl sm:text-3xl font-extrabold text-center
            bg-gradient-to-r from-sky-400 to-cyan-400
            bg-clip-text text-transparent;
   }

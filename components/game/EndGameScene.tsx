@@ -21,7 +21,7 @@ export default function EndGameScene({
         : 'The last werewolf has fallen.';
 
   return (
-    <div className="game-cinematic-scene min-h-screen flex items-center justify-center px-6 py-12">
+    <div className="game-cinematic-scene min-h-[100svh] flex items-center justify-center px-4 sm:px-6 py-10 sm:py-12">
       <div className="w-full max-w-3xl text-center space-y-6">
         <p className="reveal-prefix">Game Over</p>
         <h1
@@ -41,4 +41,3 @@ export default function EndGameScene({
     </div>
   );
 }
-

@@ -15,8 +15,21 @@ export default function GameNotebook({
   canWrite = true,
   onNotesChange,
 }: GameNotebookProps) {
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(min-width: 640px)').matches;
+  });
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [notes, setNotes] = useState<string>('');
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(min-width: 640px)');
+    const update = () => setIsDesktop(media.matches);
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   const storageKey = useMemo(() => {
     if (!lobbyName || !userId) return null;
@@ -52,10 +65,44 @@ export default function GameNotebook({
     onNotesChange(notes);
   }, [notes, onNotesChange]);
 
+  if (!isDesktop && isOpen) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-end bg-slate-950/70 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-sm">
+        <div className="w-full rounded-2xl border border-slate-700 bg-slate-900/95 p-4 shadow-2xl">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="game-section-title">Notebook</h2>
+            <button
+              type="button"
+              className="rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 hover:bg-slate-800/60"
+              onClick={() => setIsOpen(false)}
+            >
+              Close
+            </button>
+          </div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            readOnly={!canWrite}
+            placeholder="Write your notes..."
+            className={[
+              'h-[min(60svh,26rem)] w-full resize-none rounded-xl border border-slate-700 bg-slate-950/70 p-3 text-sm text-slate-100 outline-none',
+              canWrite ? 'focus:ring-2 focus:ring-sky-500' : 'opacity-70',
+            ].join(' ')}
+          />
+          {!canWrite && (
+            <p className="mt-2 text-xs text-slate-400">
+              You have been eliminated. Notebook is read-only.
+            </p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={[
-        'fixed bottom-4 right-4 z-40',
+        'fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-4 z-40',
         isOpen ? 'w-[min(92vw,24rem)]' : 'w-auto',
       ].join(' ')}
     >

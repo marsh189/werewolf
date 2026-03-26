@@ -69,7 +69,7 @@ export default function SignUp() {
     <main>
       <Navbar />
 
-      <div className="min-h-screen flex items-center justify-center px-6 py-12">
+      <div className="min-h-[100svh] flex items-center justify-center px-4 sm:px-6 py-10 sm:py-12">
         <div className="w-full max-w-lg game-card">
           <div className="game-card-glow">
             <h1 className="game-title mb-10">Create Account</h1>

@@ -27,7 +27,7 @@ export default function LobbyResultsPage() {
 
   if (!lobbyInfo || !results) {
     return (
-      <div className="min-h-screen px-6 py-12">
+      <div className="min-h-[100svh] px-4 sm:px-6 py-10 sm:py-12">
         <div className="mx-auto w-full max-w-3xl text-center space-y-4">
           <h1 className="game-title">Game Results</h1>
           <p className="text-slate-300">Loading results...</p>
@@ -37,7 +37,7 @@ export default function LobbyResultsPage() {
   }
 
   return (
-    <div className="game-cinematic-scene min-h-screen px-6 py-12">
+    <div className="game-cinematic-scene min-h-[100svh] px-4 sm:px-6 py-10 sm:py-12">
       <div className="mx-auto w-full max-w-3xl space-y-6">
         <header className="text-center space-y-2">
           <p className="game-tight-label">Final</p>

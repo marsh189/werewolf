@@ -20,6 +20,14 @@ export default function GameChat({
   refreshKey,
   currentUserId,
 }: Props) {
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(min-width: 640px)').matches;
+  });
+  const [isOpen, setIsOpen] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(min-width: 640px)').matches;
+  });
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [history, setHistory] = useState<Partial<Record<ChatChannel, ChatMessage[]>>>(
     {},
@@ -30,6 +38,18 @@ export default function GameChat({
   const [error, setError] = useState<string | null>(null);
   const messagePaneRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(min-width: 640px)');
+    const update = () => {
+      setIsDesktop(media.matches);
+      setIsOpen((current) => (media.matches ? true : current));
+    };
+    update();
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
 
   useEffect(() => {
     if (!lobbyName) return;
@@ -91,6 +111,18 @@ export default function GameChat({
     return null;
   }
 
+  if (!isDesktop && !isOpen) {
+    return (
+      <button
+        type="button"
+        className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-40 inline-flex h-12 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-950/92 px-4 text-xs font-semibold text-slate-100 shadow-2xl backdrop-blur transition hover:bg-slate-900"
+        onClick={() => setIsOpen(true)}
+      >
+        Chat
+      </button>
+    );
+  }
+
   const submitMessage = () => {
     if (!lobbyName || !activeChannel) return;
     if (!activeChannelCanSend) return;
@@ -112,41 +144,52 @@ export default function GameChat({
     });
   };
 
-  return (
-    <section className="fixed bottom-4 left-4 z-40 w-[min(92vw,24rem)] rounded-2xl border border-slate-800 bg-slate-950/92 p-3 text-left shadow-2xl backdrop-blur">
+  const panel = (
+    <div className={isDesktop ? '' : 'mx-auto w-full max-w-lg'}>
       <div className="flex items-start justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold text-slate-100">
             {activeChannel ? CHANNEL_LABELS[activeChannel] : 'Village Chat'}
           </h2>
         </div>
-        {channels.length > 1 ? (
-          <div className="flex max-w-[10rem] flex-wrap justify-end gap-1">
-            {channels.map((channel) => (
-              <button
-                key={channel}
-                type="button"
-                className={[
-                  'rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors',
-                  activeChannel === channel
-                    ? 'border-amber-400/70 bg-amber-500/15 text-amber-200'
-                    : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-slate-500',
-                ].join(' ')}
-                onClick={() => {
-                  setActiveChannel(channel);
-                  setError(null);
-                }}
-              >
-                {CHANNEL_LABELS[channel]}
-              </button>
-            ))}
-          </div>
-        ) : null}
+        <div className="flex items-center gap-2">
+          {!isDesktop ? (
+            <button
+              type="button"
+              className="rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 hover:bg-slate-800/60"
+              onClick={() => setIsOpen(false)}
+            >
+              Close
+            </button>
+          ) : null}
+          {channels.length > 1 ? (
+            <div className="flex max-w-[10rem] flex-wrap justify-end gap-1">
+              {channels.map((channel) => (
+                <button
+                  key={channel}
+                  type="button"
+                  className={[
+                    'rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors',
+                    activeChannel === channel
+                      ? 'border-amber-400/70 bg-amber-500/15 text-amber-200'
+                      : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-slate-500',
+                  ].join(' ')}
+                  onClick={() => {
+                    setActiveChannel(channel);
+                    setError(null);
+                  }}
+                >
+                  {CHANNEL_LABELS[channel]}
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </div>
       </div>
 
       <div
         ref={messagePaneRef}
-        className="lobby-scroll mt-3 h-44 overflow-y-scroll pr-1"
+        className="lobby-scroll mt-3 h-[min(45svh,18rem)] overflow-y-scroll pr-1 sm:h-44"
         onScroll={(event) => {
           const pane = event.currentTarget;
           const distanceFromBottom =
@@ -266,6 +309,20 @@ export default function GameChat({
           </button>
         </div>
       </form>
-    </section>
+    </div>
+  );
+
+  return (
+    isDesktop ? (
+      <section className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-40 w-[min(92vw,24rem)] rounded-2xl border border-slate-800 bg-slate-950/92 p-3 text-left shadow-2xl backdrop-blur">
+        {panel}
+      </section>
+    ) : (
+      <div className="fixed inset-0 z-50 flex items-end bg-slate-950/70 px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] backdrop-blur-sm">
+        <section className="w-full rounded-2xl border border-slate-800 bg-slate-950/92 p-3 text-left shadow-2xl">
+          {panel}
+        </section>
+      </div>
+    )
   );
 }

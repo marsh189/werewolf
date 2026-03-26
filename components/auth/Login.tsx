@@ -43,7 +43,7 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 py-12">
+    <div className="min-h-[100svh] flex items-center justify-center px-4 sm:px-6 py-10 sm:py-12">
       <div className="game-card">
         <div className="game-card-glow">
           <h1 className="game-title mb-10">Welcome</h1>

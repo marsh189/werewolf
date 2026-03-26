@@ -14,7 +14,7 @@ export default function NightResultsScene({
   endGameButton,
 }: NightResultsSceneProps) {
   return (
-    <div className="game-cinematic-scene min-h-screen px-6 py-12 flex items-center justify-center">
+    <div className="game-cinematic-scene min-h-[100svh] px-4 sm:px-6 py-10 sm:py-12 flex items-center justify-center">
       <div
         className={[
           'w-full max-w-3xl space-y-6 text-center transition-opacity duration-700',

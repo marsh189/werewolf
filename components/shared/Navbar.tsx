@@ -6,12 +6,14 @@ export default function Navbar() {
   const { data: session } = useSession();
 
   return (
-    <header className="w-full px-6 py-6 flex items-center justify-between">
-      <h1 className="game-title text-left">Nightfall in the Village</h1>
+    <header className="w-full px-4 py-4 sm:px-6 sm:py-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      <h1 className="game-title text-left leading-tight">
+        Nightfall in the Village
+      </h1>
 
       {session ? (
-        <div className="flex items-center gap-10 mr-6">
-          <span className="text-slate-200 font-semibold">
+        <div className="flex w-full items-center justify-between gap-3 sm:w-auto sm:justify-end sm:gap-6 sm:mr-6 min-w-0">
+          <span className="text-slate-200 font-semibold truncate min-w-0">
             {session.user?.name ?? session.user?.email}
           </span>
           <button

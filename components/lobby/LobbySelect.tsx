@@ -137,16 +137,16 @@ export default function LobbySelect() {
 
   return (
     <LobbyGuard>
-      <div className="w-full max-w-6xl mx-auto px-6 py-8">
+      <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
         <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <h1 className="game-title text-left mt-2">Lobbies</h1>
             </div>
 
-            <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <div className="flex flex-row flex-wrap items-center gap-3">
               <button
-                className="game-button-primary py-1.5 md:w-auto md:px-6"
+                className="game-button-primary w-auto px-6 py-1.5"
                 type="button"
                 onClick={() => setIsCreateOpen(true)}
               >
@@ -155,7 +155,7 @@ export default function LobbySelect() {
               <button
                 type="button"
                 aria-label="Refresh"
-                className="game-button-primary py-1.5 md:w-auto md:px-2"
+                className="game-button-primary w-auto px-2 py-1.5"
                 onClick={requestLobbiesList}
               >
                 <RefreshIcon />
@@ -204,41 +204,81 @@ export default function LobbySelect() {
 
           <div className="h-px w-full bg-gradient-to-r from-transparent via-sky-400/60 to-transparent" />
           <div className="flex justify-center">
-            <div className="w-full overflow-hidden max-h-[520px] overflow-y-scroll lobby-scroll">
-              <table className="w-full text-center text-sm table-fixed">
-                <colgroup>
-                  <col className="w-2/3" />
-                  <col className="w-1/3" />
-                  <col className="w-1/3" />
-                </colgroup>
-                <thead className="sticky top-0 z-10 text-slate-300 border-b border-slate-700/60 bg-slate-950/80 backdrop-blur">
-                  <tr>
-                    <th className="pl-3 py-3 text-left game-table-head">
-                      Lobby Name
-                    </th>
-                    <th className="pr-12 py-3 text-right game-table-head">
-                      Players
-                    </th>
-                    <th className="pr-6 py-3 text-right game-table-head">
-                      Status
-                    </th>
-                  </tr>
-                </thead>
-
-                <tbody className="text-slate-100">
-                  {displayedLobbies.map((lobby) => (
-                    <LobbyCard
+            <div className="w-full">
+              <div className="sm:hidden space-y-2">
+                {displayedLobbies.length ? (
+                  displayedLobbies.map((lobby) => (
+                    <button
                       key={lobby.lobbyName}
-                      lobbyName={lobby.lobbyName}
-                      memberCount={lobby.memberCount}
-                      status={lobby.started}
-                      onJoin={(name) => {
-                        joinByName(name);
-                      }}
-                    />
-                  ))}
-                </tbody>
-              </table>
+                      type="button"
+                      className="w-full game-box py-3 text-left flex items-center justify-between gap-3"
+                      onClick={() => joinByName(lobby.lobbyName)}
+                    >
+                      <div className="min-w-0">
+                        <span className="text-white font-semibold truncate block">
+                          {lobby.lobbyName}
+                        </span>
+                        <p className="text-xs text-slate-400">
+                          {lobby.memberCount} player{lobby.memberCount === 1 ? '' : 's'}
+                        </p>
+                      </div>
+                      <span
+                        className={[
+                          'shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold',
+                          lobby.started
+                            ? 'border-red-500/40 bg-red-500/10 text-red-200'
+                            : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200',
+                        ].join(' ')}
+                      >
+                        {lobby.started ? 'Playing' : 'Open'}
+                      </span>
+                    </button>
+                  ))
+                ) : (
+                  <div className="game-box py-4">
+                    <span className="text-slate-300 text-sm">
+                      No lobbies found.
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              <div className="hidden sm:block max-h-[520px] overflow-auto lobby-scroll">
+                <table className="w-full min-w-[32rem] text-center text-xs sm:text-sm table-fixed">
+                  <colgroup>
+                    <col className="w-2/3" />
+                    <col className="w-1/3" />
+                    <col className="w-1/3" />
+                  </colgroup>
+                  <thead className="sticky top-0 z-10 text-slate-300 border-b border-slate-700/60 bg-slate-950/80 backdrop-blur">
+                    <tr>
+                      <th className="pl-3 py-3 text-left game-table-head">
+                        Lobby Name
+                      </th>
+                      <th className="pr-12 py-3 text-right game-table-head">
+                        Players
+                      </th>
+                      <th className="pr-6 py-3 text-right game-table-head">
+                        Status
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody className="text-slate-100">
+                    {displayedLobbies.map((lobby) => (
+                      <LobbyCard
+                        key={lobby.lobbyName}
+                        lobbyName={lobby.lobbyName}
+                        memberCount={lobby.memberCount}
+                        status={lobby.started}
+                        onJoin={(name) => {
+                          joinByName(name);
+                        }}
+                      />
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </div>

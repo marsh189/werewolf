@@ -580,18 +580,23 @@ export default function LobbyGamePage() {
         }
         className={[
           'game-box relative w-full text-left transition-all duration-150',
-          isSelectedTarget
-            ? 'border-amber-400 bg-amber-500/15 shadow-[0_0_0_1px_rgba(251,191,36,0.6)]'
-            : '',
           isActionable
             ? 'cursor-pointer border-sky-500/50 bg-sky-500/10 hover:bg-sky-500/20 hover:border-sky-400/70 hover:translate-y-[-1px]'
             : 'opacity-50 cursor-not-allowed border-slate-700/50 bg-slate-900/40',
+          isSelectedTarget
+            ? 'border-amber-300/90 bg-gradient-to-r from-amber-500/16 to-sky-500/8 ring-4 ring-amber-400/35 shadow-[0_0_0_1px_rgba(251,191,36,0.55),0_0_24px_rgba(251,191,36,0.14)] translate-y-0 hover:translate-y-0'
+            : '',
         ].join(' ')}
         onClick={() => {
           if (!lobbyName || typeof lobbyName !== 'string') return;
 
           if (canKillAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              nightKill(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             nightKill(lobbyName, member.userId);
             return;
@@ -599,6 +604,11 @@ export default function LobbyGamePage() {
 
           if (canEscortAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              escortVisit(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             escortVisit(lobbyName, member.userId);
             return;
@@ -606,6 +616,11 @@ export default function LobbyGamePage() {
 
           if (canGuardAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              bodyguardGuard(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             bodyguardGuard(lobbyName, member.userId);
             return;
@@ -613,6 +628,11 @@ export default function LobbyGamePage() {
 
           if (canProtectAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              doctorProtect(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             doctorProtect(lobbyName, member.userId);
             return;
@@ -620,6 +640,11 @@ export default function LobbyGamePage() {
 
           if (canTrackAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              trackerWatch(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             trackerWatch(lobbyName, member.userId);
             return;
@@ -627,6 +652,11 @@ export default function LobbyGamePage() {
 
           if (canLookoutAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              lookoutWatch(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             lookoutWatch(lobbyName, member.userId);
             return;
@@ -634,6 +664,11 @@ export default function LobbyGamePage() {
 
           if (canInvestigateAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              investigate(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             investigate(lobbyName, member.userId);
             return;
@@ -641,6 +676,11 @@ export default function LobbyGamePage() {
 
           if (canFrameAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              frame(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             frame(lobbyName, member.userId);
             return;
@@ -648,6 +688,11 @@ export default function LobbyGamePage() {
 
           if (canScoutAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              prowl(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             prowl(lobbyName, member.userId);
             return;
@@ -655,6 +700,11 @@ export default function LobbyGamePage() {
 
           if (canKidnapAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              snatch(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             snatch(lobbyName, member.userId);
             return;
@@ -662,6 +712,11 @@ export default function LobbyGamePage() {
 
           if (canCurseAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              curse(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             curse(lobbyName, member.userId);
             return;
@@ -669,6 +724,11 @@ export default function LobbyGamePage() {
 
           if (canShapeshiftAtNight) {
             if (currentPhase !== 'night') return;
+            if (selectedNightActionTargetId === member.userId) {
+              setSelectedNightActionTargetId(null);
+              mimic(lobbyName, member.userId);
+              return;
+            }
             setSelectedNightActionTargetId(member.userId);
             mimic(lobbyName, member.userId);
             return;
@@ -686,9 +746,12 @@ export default function LobbyGamePage() {
           }
 
           if (canVoteNow) {
-            setSelectedVoteTargetId((previous) =>
-              previous === member.userId ? null : member.userId,
-            );
+            if (selectedVoteTargetId === member.userId) {
+              setSelectedVoteTargetId(null);
+              castVote(lobbyName, member.userId);
+              return;
+            }
+            setSelectedVoteTargetId(member.userId);
             castVote(lobbyName, member.userId);
           }
         }}
@@ -722,15 +785,6 @@ export default function LobbyGamePage() {
             {member.alive ? '\u25CF' : '\u2620'}
           </span>
         </span>
-        {isSelectedTarget ? (
-          <span
-            className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 translate-x-[calc(100%+0.75rem)] inline-flex items-center justify-center h-6 w-6 rounded-full border border-amber-400/70 bg-amber-500/15 text-amber-200 shadow-[0_0_0_1px_rgba(251,191,36,0.35)]"
-            aria-label="Selected target"
-            title="Selected target"
-          >
-            {'\u2713'}
-          </span>
-        ) : null}
       </button>
     );
   };
@@ -738,7 +792,7 @@ export default function LobbyGamePage() {
   return (
     <>
       {currentPhase === 'lobby' && lobbyInfo?.startingAt ? (
-        <div className="game-cinematic-scene min-h-screen flex items-center justify-center px-6 py-12">
+        <div className="game-cinematic-scene min-h-[100svh] flex items-center justify-center px-4 sm:px-6 py-10 sm:py-12">
           <div className="w-full max-w-3xl text-center space-y-4">
             <p className="game-tight-label">Starting</p>
             <h1 className="game-title">Game begins soon</h1>
@@ -770,24 +824,24 @@ export default function LobbyGamePage() {
           endGameButton={endGameButton}
         />
       ) : currentPhase === 'gameResults' ? (
-        <div className="game-cinematic-scene min-h-screen" />
+        <div className="game-cinematic-scene min-h-[100svh]" />
       ) : (
         <div
           className={[
-            'min-h-screen px-6 py-12',
+            'min-h-[100svh] px-4 sm:px-6 py-6 sm:py-12 pb-80',
             isNightCyclePhase ? 'game-cinematic-scene' : '',
           ].join(' ')}
         >
-          <header className="mx-auto w-full max-w-3xl mb-6 flex items-start justify-between gap-4">
+          <header className="mx-auto w-full max-w-3xl mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div className="text-left">
               <p className="game-tight-label">Lobby</p>
               <h1 className="game-title text-left leading-tight">
                 {lobbyName ?? '...'}
               </h1>
             </div>
-            <div className="game-box shrink-0 text-right min-w-[11rem]">
+            <div className="game-box w-full sm:w-auto shrink-0 text-left sm:text-right sm:min-w-[11rem]">
               <p className="game-tight-label">Role</p>
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex items-center justify-between sm:justify-end gap-2">
                 <p className="font-semibold text-slate-100">
                   {roleDisplayName}
                 </p>

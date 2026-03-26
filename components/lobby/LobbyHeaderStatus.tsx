@@ -10,8 +10,8 @@ export default function LobbyHeaderStatus({
   startingRemainingSeconds,
 }: LobbyHeaderStatusProps) {
   return (
-    <div className="flex items-center gap-3 mb-3">
-      <h1 className="game-title text-left">{lobbyName}</h1>
+    <div className="flex flex-col items-start gap-2 mb-3 sm:flex-row sm:items-center sm:gap-3">
+      <h1 className="game-title text-left leading-tight">{lobbyName}</h1>
       <span
         className={[
           'px-3 py-1 rounded-full text-xs font-semibold border',

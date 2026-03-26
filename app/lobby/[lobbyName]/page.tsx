@@ -61,6 +61,8 @@ export default function Lobby() {
       ? lobbyInfo.hostUserId === session.user.id
       : false;
 
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
   const updateLobbySettings = (next: LobbySettingsUpdate) => {
     if (!lobbyName) return;
     socket
@@ -139,7 +141,7 @@ export default function Lobby() {
   return (
     <>
       <Navbar />
-      <div className="min-h-screen flex flex-col items-center px-4 py-4 md:px-6 md:py-6">
+      <div className="min-h-[100svh] flex flex-col items-center px-4 py-4 sm:px-6 sm:py-6">
         <div className="w-full max-w-6xl">
           {lobbyInfo ? (
             <LobbyHeaderStatus
@@ -153,14 +155,14 @@ export default function Lobby() {
             </div>
           )}
 
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-[calc(100vh-12rem)]">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-[calc(100svh-12rem)]">
             <div className="w-full lg:w-1/3 flex flex-col gap-4">
               <LobbyMembersList
                 members={lobbyInfo?.members ?? []}
                 hostUserId={lobbyInfo?.hostUserId ?? ''}
               />
 
-              <div className="pt-2 space-y-2 mt-auto">
+              <div className="hidden lg:block pt-2 space-y-2 mt-auto">
                 {sessionStatus === 'loading' && (
                   <div className="text-xs text-slate-400">
                     Checking session...
@@ -182,65 +184,152 @@ export default function Lobby() {
             <div className="hidden lg:block lg:self-stretch w-px bg-gradient-to-b from-transparent via-sky-400/60 to-transparent" />
 
             <div className="w-full lg:w-2/3 lg:pl-6 flex flex-col">
-              <div className="flex items-center justify-between">
-                <h2 className="game-section-title">Settings</h2>
-              </div>
+              <div className="lg:hidden">
+                <button
+                  type="button"
+                  className="w-full py-2 flex items-center justify-between gap-3 border-b border-slate-700/70"
+                  aria-expanded={settingsOpen}
+                  onClick={() => setSettingsOpen((prev) => !prev)}
+                >
+                  <span className="game-section-title text-slate-300">
+                    Settings
+                  </span>
+                  <span className="text-xs font-semibold text-slate-400">
+                    {settingsOpen ? 'Hide' : 'Show'}
+                  </span>
+                </button>
 
-              <div className="mt-4">
-                <LobbySettings
-                  isHost={isHost}
-                  werewolfCount={Math.max(
-                    (lobbyInfo?.specialRolesEnabled ?? false) ? 2 : 1,
-                    lobbyInfo?.werewolfCount ?? 1,
-                  )}
-                  specialRolesEnabled={lobbyInfo?.specialRolesEnabled ?? false}
-                  neutralRolesEnabled={lobbyInfo?.neutralRolesEnabled ?? false}
-                  phaseDurations={
-                    lobbyInfo?.phaseDurations ?? {
-                      daySeconds: 10,
-                      nightSeconds: 10,
-                      voteSeconds: 10,
-                    }
-                  }
-                  onWerewolfChange={handleWerewolfChange}
-                  onSpecialRolesEnabledChange={handleSpecialRolesEnabledChange}
-                  onNeutralRolesEnabledChange={handleNeutralRolesEnabledChange}
-                  onPhaseChange={handlePhaseChange}
-                />
-              </div>
-
-              <div className="pt-4 space-y-2 mt-auto">
-                {sessionStatus === 'loading' && (
-                  <div className="text-xs text-slate-400">
-                    Checking session...
+                {settingsOpen ? (
+                  <div className="mt-4 space-y-4">
+                    <LobbySettings
+                      isHost={isHost}
+                      werewolfCount={Math.max(
+                        (lobbyInfo?.specialRolesEnabled ?? false) ? 2 : 1,
+                        lobbyInfo?.werewolfCount ?? 1,
+                      )}
+                      specialRolesEnabled={lobbyInfo?.specialRolesEnabled ?? false}
+                      neutralRolesEnabled={lobbyInfo?.neutralRolesEnabled ?? false}
+                      phaseDurations={
+                        lobbyInfo?.phaseDurations ?? {
+                          daySeconds: 10,
+                          nightSeconds: 10,
+                          voteSeconds: 10,
+                        }
+                      }
+                      onWerewolfChange={handleWerewolfChange}
+                      onSpecialRolesEnabledChange={handleSpecialRolesEnabledChange}
+                      onNeutralRolesEnabledChange={handleNeutralRolesEnabledChange}
+                      onPhaseChange={handlePhaseChange}
+                    />
                   </div>
-                )}
-                {isHost && (
+                ) : null}
+
+                <div className="pt-4 space-y-2">
+                  {sessionStatus === 'loading' && (
+                    <div className="text-xs text-slate-400">
+                      Checking session...
+                    </div>
+                  )}
                   <button
                     type="button"
-                    className="game-button-primary disabled:opacity-60 disabled:cursor-not-allowed"
-                    disabled={
-                      !lobbyInfo ||
-                      lobbyInfo.started ||
-                      lobbyInfo.startingAt !== null
-                    }
+                    className="game-button-secondary"
                     onClick={() => {
-                      socket
-                        .timeout(5000)
-                        .emit('startGame', { lobbyName }, (err: unknown, res: SocketAck | undefined) => {
-                          if (err || !res?.ok) {
-                            console.error(res?.error ?? 'Failed to start game');
-                          }
-                        });
+                      socket.emit('leaveLobby', { lobbyName });
+                      router.push('/');
                     }}
                   >
-                    {lobbyInfo?.startingAt !== null
-                      ? 'Starting...'
-                      : lobbyInfo?.started
-                        ? 'Game Started'
-                        : 'Start Game'}
+                    Leave Lobby
                   </button>
-                )}
+                  {isHost && (
+                    <button
+                      type="button"
+                      className="game-button-primary disabled:opacity-60 disabled:cursor-not-allowed"
+                      disabled={
+                        !lobbyInfo ||
+                        lobbyInfo.started ||
+                        lobbyInfo.startingAt !== null
+                      }
+                      onClick={() => {
+                        socket
+                          .timeout(5000)
+                          .emit('startGame', { lobbyName }, (err: unknown, res: SocketAck | undefined) => {
+                            if (err || !res?.ok) {
+                              console.error(res?.error ?? 'Failed to start game');
+                            }
+                          });
+                      }}
+                    >
+                      {lobbyInfo?.startingAt !== null
+                        ? 'Starting...'
+                        : lobbyInfo?.started
+                          ? 'Game Started'
+                          : 'Start Game'}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="hidden lg:flex lg:flex-col lg:flex-1">
+                <div className="flex items-center justify-between">
+                  <h2 className="game-section-title">Settings</h2>
+                </div>
+
+                <div className="mt-4">
+                  <LobbySettings
+                    isHost={isHost}
+                    werewolfCount={Math.max(
+                      (lobbyInfo?.specialRolesEnabled ?? false) ? 2 : 1,
+                      lobbyInfo?.werewolfCount ?? 1,
+                    )}
+                    specialRolesEnabled={lobbyInfo?.specialRolesEnabled ?? false}
+                    neutralRolesEnabled={lobbyInfo?.neutralRolesEnabled ?? false}
+                    phaseDurations={
+                      lobbyInfo?.phaseDurations ?? {
+                        daySeconds: 10,
+                        nightSeconds: 10,
+                        voteSeconds: 10,
+                      }
+                    }
+                    onWerewolfChange={handleWerewolfChange}
+                    onSpecialRolesEnabledChange={handleSpecialRolesEnabledChange}
+                    onNeutralRolesEnabledChange={handleNeutralRolesEnabledChange}
+                    onPhaseChange={handlePhaseChange}
+                  />
+                </div>
+
+                <div className="pt-4 space-y-2 mt-auto">
+                  {sessionStatus === 'loading' && (
+                    <div className="text-xs text-slate-400">
+                      Checking session...
+                    </div>
+                  )}
+                  {isHost && (
+                    <button
+                      type="button"
+                      className="game-button-primary disabled:opacity-60 disabled:cursor-not-allowed"
+                      disabled={
+                        !lobbyInfo ||
+                        lobbyInfo.started ||
+                        lobbyInfo.startingAt !== null
+                      }
+                      onClick={() => {
+                        socket
+                          .timeout(5000)
+                          .emit('startGame', { lobbyName }, (err: unknown, res: SocketAck | undefined) => {
+                            if (err || !res?.ok) {
+                              console.error(res?.error ?? 'Failed to start game');
+                            }
+                          });
+                      }}
+                    >
+                      {lobbyInfo?.startingAt !== null
+                        ? 'Starting...'
+                        : lobbyInfo?.started
+                          ? 'Game Started'
+                          : 'Start Game'}
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           </div>
