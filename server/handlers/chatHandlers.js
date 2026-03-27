@@ -6,23 +6,16 @@ import {
   parseChatChannel,
   sanitizeChatContent,
 } from '../chatService.js';
+import { isRapidAction } from '../actionThrottleService.js';
 import { requireAckAndLobby, requireLobbyMembership } from './shared.js';
 
-const isRapidChat = (lobby, userId, channel, minIntervalMs = 500) => {
-  if (!lobby.actionTimestamps) {
-    lobby.actionTimestamps = new Map();
-  }
-  const key = `chat:${channel}:${userId}`;
-  const now = Date.now();
-  const lastAt = lobby.actionTimestamps.get(key) ?? 0;
-  if (now - lastAt < minIntervalMs) {
-    return true;
-  }
-  lobby.actionTimestamps.set(key, now);
-  return false;
-};
-
 export const registerChatHandlers = ({ io, socket, user }) => {
+  /* =============================================================================
+     Chat Handlers
+
+     Socket events for initializing chat state and sending messages.
+  ============================================================================= */
+
   socket.on('chat:init', (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
@@ -53,7 +46,7 @@ export const registerChatHandlers = ({ io, socket, user }) => {
       return ack({ ok: false, error: 'Chat is unavailable for that channel right now' });
     }
 
-    if (isRapidChat(lobby, user.id, channel)) {
+    if (isRapidAction(lobby, user.id, `chat:${channel}`, 500)) {
       return ack({ ok: true, throttled: true });
     }
 

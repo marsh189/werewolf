@@ -1,11 +1,26 @@
 const lobbies = new Map();
 const userToLobby = new Map();
 
+/* =============================================================================
+   In-Memory State
+
+   This server stores active lobbies and user->lobby membership in-memory.
+   If you restart the server, all lobbies are lost.
+============================================================================= */
+
+/* -----------------------------------------------------------------------------
+   Lobbies
+----------------------------------------------------------------------------- */
+
 export const getLobby = (name) => lobbies.get(name);
 export const setLobby = (name, lobby) => lobbies.set(name, lobby);
 export const deleteLobby = (name) => lobbies.delete(name);
 export const hasLobby = (name) => lobbies.has(name);
 export const getLobbyEntries = () => lobbies.entries();
+
+/* -----------------------------------------------------------------------------
+   User Membership
+----------------------------------------------------------------------------- */
 
 export const getUserLobby = (userId) => userToLobby.get(userId);
 export const setUserLobby = (userId, lobbyName) => userToLobby.set(userId, lobbyName);

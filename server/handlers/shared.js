@@ -2,6 +2,14 @@ import { getLobby, getUserLobby } from '../state.js';
 import { getAck, parseLobbyName } from '../lobbyService.js';
 import { parseTargetUserId } from '../validators.js';
 
+/* =============================================================================
+   Handler Guards (Shared)
+
+   Small validation helpers used by socket event handlers to keep them:
+   - consistent (same error messages)
+   - compact (less repeated boilerplate)
+============================================================================= */
+
 export const requireAckAndLobby = (data, callback) => {
   const ack = getAck(callback);
   const name = parseLobbyName(data);

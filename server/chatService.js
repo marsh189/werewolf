@@ -1,6 +1,15 @@
 const CHAT_HISTORY_LIMIT = 60;
 const CHAT_MESSAGE_MAX_LENGTH = 300;
 
+/* =============================================================================
+   Chat Service (Server)
+
+   Keeps per-lobby chat history and enforces:
+   - which channels exist
+   - which audiences can view / send at a given phase
+   - per-channel history limits
+============================================================================= */
+
 export const CHAT_CHANNELS = {
   village: 'village',
 };
@@ -22,6 +31,20 @@ const VILLAGE_CHAT_VISIBLE_PHASES = new Set([
   'vote',
   'eliminationResults',
 ]);
+
+const WEREWOLF_ROLE_SET = new Set([
+  'Werewolf',
+  'AlphaWolf',
+  'Framer',
+  'Prowler',
+  'Cursed',
+  'Snatcher',
+  'Mimic',
+]);
+
+/* -----------------------------------------------------------------------------
+   State Helpers
+----------------------------------------------------------------------------- */
 
 const ensureChatState = (lobby) => {
   if (!lobby.chatMessages) {
@@ -51,17 +74,15 @@ export const sanitizeChatContent = (value) => {
   return collapsed.slice(0, CHAT_MESSAGE_MAX_LENGTH);
 };
 
+/* -----------------------------------------------------------------------------
+   Audience + Permissions
+----------------------------------------------------------------------------- */
+
 const isAlive = (lobby, userId) => !lobby.eliminatedUserIds?.has(userId);
 
 const isAliveWerewolf = (lobby, userId) =>
   isAlive(lobby, userId) &&
-  (lobby.playerRoles?.get(userId) === 'Werewolf' ||
-    lobby.playerRoles?.get(userId) === 'AlphaWolf' ||
-    lobby.playerRoles?.get(userId) === 'Framer' ||
-    lobby.playerRoles?.get(userId) === 'Prowler' ||
-    lobby.playerRoles?.get(userId) === 'Cursed' ||
-    lobby.playerRoles?.get(userId) === 'Snatcher' ||
-    lobby.playerRoles?.get(userId) === 'Mimic');
+  WEREWOLF_ROLE_SET.has(lobby.playerRoles?.get(userId));
 
 const getChatAudienceForUser = (lobby, userId) => {
   if (!lobby.members.has(userId) || lobby.started !== true) return null;
@@ -149,7 +170,20 @@ export const buildChatStateForUser = (lobby, userId) => {
   };
 };
 
+/* -----------------------------------------------------------------------------
+   Messages (Add / Emit)
+----------------------------------------------------------------------------- */
+
 export const syncLobbyChatRooms = () => {};
+
+const pushMessageToHistory = (chatMessages, channel, message) => {
+  const channelMessages = chatMessages[channel] ?? [];
+  channelMessages.push(message);
+  if (channelMessages.length > CHAT_HISTORY_LIMIT) {
+    channelMessages.splice(0, channelMessages.length - CHAT_HISTORY_LIMIT);
+  }
+  chatMessages[channel] = channelMessages;
+};
 
 export const addChatMessage = (lobby, { channel, userId, name, content }) => {
   const chatMessages = ensureChatState(lobby);
@@ -164,12 +198,7 @@ export const addChatMessage = (lobby, { channel, userId, name, content }) => {
     sentAt: Date.now(),
   };
 
-  const channelMessages = chatMessages[channel] ?? [];
-  channelMessages.push(nextMessage);
-  if (channelMessages.length > CHAT_HISTORY_LIMIT) {
-    channelMessages.splice(0, channelMessages.length - CHAT_HISTORY_LIMIT);
-  }
-  chatMessages[channel] = channelMessages;
+  pushMessageToHistory(chatMessages, channel, nextMessage);
 
   return nextMessage;
 };
@@ -195,12 +224,7 @@ export const addTargetedSystemChatMessage = (
     sentAt: Date.now(),
   };
 
-  const channelMessages = chatMessages[CHAT_CHANNELS.village] ?? [];
-  channelMessages.push(nextMessage);
-  if (channelMessages.length > CHAT_HISTORY_LIMIT) {
-    channelMessages.splice(0, channelMessages.length - CHAT_HISTORY_LIMIT);
-  }
-  chatMessages[CHAT_CHANNELS.village] = channelMessages;
+  pushMessageToHistory(chatMessages, CHAT_CHANNELS.village, nextMessage);
 
   return nextMessage;
 };

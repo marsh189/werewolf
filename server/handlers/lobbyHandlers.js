@@ -2,7 +2,7 @@ import { getLobby, getUserLobby, hasLobby } from '../state.js';
 import {
   buildLobbyInfo,
   createLobby,
-  endGameForLobby,
+  emitLobbyUpdate,
   getAck,
   getLobbies,
   joinLobby,
@@ -10,7 +10,6 @@ import {
   removeUserFromLobby,
   parseLobbyName,
   scheduleGameStart,
-  emitLobbyUpdate,
 } from '../lobbyService.js';
 import {
   parseLobbyNameInput,
@@ -24,66 +23,20 @@ import {
   requireHost,
   requireSameCurrentLobby,
 } from './shared.js';
+import {
+  handleInGamePresenceDisconnect,
+  setSocketViewPresence,
+} from '../presenceService.js';
 
 export const registerLobbyHandlers = ({ io, socket, user }) => {
-  const updateInGamePresence = (lobby, userId, delta) => {
-    if (!lobby?.inGameUserCounts) {
-      lobby.inGameUserCounts = new Map();
-    }
-    const next = Math.max(0, (lobby.inGameUserCounts.get(userId) ?? 0) + delta);
-    if (next === 0) {
-      lobby.inGameUserCounts.delete(userId);
-    } else {
-      lobby.inGameUserCounts.set(userId, next);
-    }
-  };
+  /* =============================================================================
+     Lobby Handlers
 
-  const getTotalInGameCount = (lobby) =>
-    Array.from(lobby?.inGameUserCounts?.values?.() ?? []).reduce(
-      (sum, n) => sum + (Number(n) || 0),
-      0,
-    );
-
-  const maybeAutoResetEndedGame = (lobby) => {
-    if (!lobby) return;
-    if (lobby.gamePhase !== 'gameResults') return;
-    if (getTotalInGameCount(lobby) !== 0) return;
-    endGameForLobby(io, lobby);
-  };
-
-  const setSocketViewPresence = (lobbyName, view) => {
-    const lobby = getLobby(lobbyName);
-    if (!lobby) return { ok: false, error: 'Lobby does not exist' };
-
-    const current = getUserLobby(user.id) ?? null;
-    const isMember = lobby.members.has(user.id);
-    if (!isMember && current !== lobbyName) {
-      return { ok: false, error: 'User has not joined this lobby' };
-    }
-
-    const previous = socket.data?.viewPresence ?? null;
-    const previousLobbyName = previous?.lobbyName ?? null;
-    const previousView = previous?.view ?? null;
-    const wasInGame = previousView === 'game' || previousView === 'results';
-    const nowInGame = view === 'game' || view === 'results';
-
-    if (previousLobbyName && wasInGame) {
-      const previousLobby = getLobby(previousLobbyName);
-      if (previousLobby) {
-        updateInGamePresence(previousLobby, user.id, -1);
-        maybeAutoResetEndedGame(previousLobby);
-      }
-    }
-
-    socket.data.viewPresence = { lobbyName, view };
-
-    if (nowInGame) {
-      updateInGamePresence(lobby, user.id, 1);
-    }
-
-    maybeAutoResetEndedGame(lobby);
-    return { ok: true };
-  };
+     Socket events for lobby lifecycle:
+     - create/join/leave/start/end
+     - settings updates
+     - presence tracking (which screen the user is viewing)
+  ============================================================================= */
 
   socket.on('joinLobby', (data, callback) => {
     const ack = getAck(callback);
@@ -157,6 +110,14 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     return ack({ ok: true, lobbyInfo: buildLobbyInfo(lobby) });
   });
 
+  /* ---------------------------------------------------------------------------
+     Presence
+
+     Clients call this when navigating between lobby/game/results. We track it to:
+     - maintain a rough in-game presence counter
+     - auto-reset ended games when nobody is viewing them anymore
+  --------------------------------------------------------------------------- */
+
   socket.on('presence:setView', (data, callback) => {
     const ack = getAck(callback);
     const name = parseLobbyName(data);
@@ -167,13 +128,14 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
       return ack({ ok: false, error: 'Invalid view' });
     }
 
-    const result = setSocketViewPresence(name, view);
+    const result = setSocketViewPresence({
+      io,
+      socket,
+      userId: user.id,
+      lobbyName: name,
+      view,
+    });
     if (!result.ok) return ack(result);
-
-    const lobby = getLobby(name);
-    if (lobby) {
-      emitLobbyUpdate(io, lobby);
-    }
     return ack({ ok: true });
   });
 
@@ -256,18 +218,16 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     return ack({ ok: true });
   });
 
+  /* ---------------------------------------------------------------------------
+     Disconnect
+
+     Handle two separate concerns:
+     1) Presence bookkeeping (in-game counts)
+     2) Lobby cleanup (removing users after a grace period if the game hasn't started)
+  --------------------------------------------------------------------------- */
+
   socket.on('disconnect', () => {
-    const previous = socket.data?.viewPresence ?? null;
-    const previousLobbyName = previous?.lobbyName ?? null;
-    const previousView = previous?.view ?? null;
-    const wasInGame = previousView === 'game' || previousView === 'results';
-    if (previousLobbyName && wasInGame) {
-      const previousLobby = getLobby(previousLobbyName);
-      if (previousLobby) {
-        updateInGamePresence(previousLobby, user.id, -1);
-        maybeAutoResetEndedGame(previousLobby);
-      }
-    }
+    handleInGamePresenceDisconnect({ io, socket, userId: user.id });
 
     const lobbyName = getUserLobby(user.id);
     if (!lobbyName) return;

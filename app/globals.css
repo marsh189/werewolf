@@ -146,6 +146,10 @@ body {
   .game-tight-label {
     @apply uppercase tracking-[0.2em] text-[11px] text-slate-300;
   }
+
+  .game-phase-overlay {
+    @apply pointer-events-none fixed inset-0 bg-black;
+  }
 }
 
 .game-cinematic-scene {

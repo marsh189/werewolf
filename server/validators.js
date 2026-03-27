@@ -1,3 +1,10 @@
+/* =============================================================================
+   Validators / Sanitizers (Server)
+
+   Small helpers for parsing untrusted socket payloads.
+   Keep these strict and predictable: return `null` on invalid input.
+============================================================================= */
+
 export const parseLobbyNameInput = (data) => {
   const value =
     typeof data === 'string'
@@ -36,17 +43,12 @@ export const sanitizeNeutralRolesEnabled = (input) => input === true;
 
 export const sanitizePhaseDurations = (phaseDurations, minSeconds = 10) => {
   if (!phaseDurations || typeof phaseDurations !== 'object') return null;
-  const daySeconds = Math.max(
-    minSeconds,
-    Number(phaseDurations.daySeconds) || minSeconds,
-  );
-  const nightSeconds = Math.max(
-    minSeconds,
-    Number(phaseDurations.nightSeconds) || minSeconds,
-  );
-  const voteSeconds = Math.max(
-    minSeconds,
-    Number(phaseDurations.voteSeconds) || minSeconds,
-  );
+
+  const sanitizeSeconds = (value) =>
+    Math.max(minSeconds, Number(value) || minSeconds);
+
+  const daySeconds = sanitizeSeconds(phaseDurations.daySeconds);
+  const nightSeconds = sanitizeSeconds(phaseDurations.nightSeconds);
+  const voteSeconds = sanitizeSeconds(phaseDurations.voteSeconds);
   return { daySeconds, nightSeconds, voteSeconds };
 };

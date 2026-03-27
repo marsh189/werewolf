@@ -3,134 +3,38 @@ import {
   convertExecutionersToJesterForNightDeaths,
   emitLobbyUpdate,
 } from '../lobbyService.js';
-import { requireAckAndLobby, requireLobbyMembership, requireTargetUserId } from './shared.js';
+import { buildGameInitPayloadForUser } from '../gameInitService.js';
+import { isRapidAction } from '../actionThrottleService.js';
+import {
+  requireAckAndLobby,
+  requireLobbyMembership,
+  requireTargetUserId,
+} from './shared.js';
 
-const isRapidAction = (lobby, userId, actionKey, minIntervalMs = 250) => {
-  if (!lobby.actionTimestamps) {
-    lobby.actionTimestamps = new Map();
-  }
-  const key = `${actionKey}:${userId}`;
-  const now = Date.now();
-  const lastAt = lobby.actionTimestamps.get(key) ?? 0;
-  if (now - lastAt < minIntervalMs) {
-    return true;
-  }
-  lobby.actionTimestamps.set(key, now);
-  return false;
-};
+/* =============================================================================
+   Game Handlers
+
+   Socket events that mutate game state (night actions, voting, notebooks).
+   Keep these handlers strict about:
+   - lobby membership
+   - phase gating
+   - throttling spammy events
+============================================================================= */
 
 export const registerGameHandlers = ({ io, socket, user }) => {
+  /* ---------------------------------------------------------------------------
+     Init + Notebook
+  --------------------------------------------------------------------------- */
+
   socket.on('game:init', (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
     if (!requireLobbyMembership(lobby, user.id, ack)) return;
 
-    const myRole = lobby.playerRoles.get(user.id) ?? null;
-    const myRoleState = lobby.playerRoleState?.get(user.id) ?? {};
-    const executionerTargetUserId =
-      myRole === 'Executioner'
-        ? (myRoleState.executionerTargetUserId ?? null)
-        : null;
-    const executionerTargetName = executionerTargetUserId
-      ? (lobby.members.get(executionerTargetUserId)?.name ?? 'Unknown Player')
-      : null;
-    const isWerewolfRole = (role) =>
-      role === 'Werewolf' ||
-      role === 'AlphaWolf' ||
-      role === 'Framer' ||
-      role === 'Prowler' ||
-      role === 'Cursed' ||
-      role === 'Snatcher' ||
-      role === 'Mimic';
-
-    const werewolfUserIds = isWerewolfRole(myRole)
-      ? Array.from(lobby.playerRoles.entries())
-          .filter(([, role]) => isWerewolfRole(role))
-          .map(([userId]) => userId)
-      : [];
-    const escortVisitTargetUserId =
-      myRole === 'Escort'
-        ? (lobby.pendingEscortVisitTargets?.get(user.id) ?? null)
-        : null;
-    const bodyguardGuardTargetUserId =
-      myRole === 'Bodyguard'
-        ? (lobby.pendingBodyguardGuardTargets?.get(user.id) ?? null)
-        : null;
-    const doctorProtectTargetUserId =
-      myRole === 'Doctor'
-        ? (lobby.pendingDoctorProtectTargets?.get(user.id) ?? null)
-        : null;
-    const trackerWatchTargetUserId =
-      myRole === 'Tracker'
-        ? (lobby.pendingTrackerWatchTargets?.get(user.id) ?? null)
-        : null;
-    const lookoutWatchTargetUserId =
-      myRole === 'Lookout'
-        ? (lobby.pendingLookoutWatchTargets?.get(user.id) ?? null)
-        : null;
-    const investigatorVisitTargetUserId =
-      myRole === 'Investigator'
-        ? (lobby.pendingInvestigatorVisitTargets?.get(user.id) ?? null)
-        : null;
-    const framerTargetUserId =
-      myRole === 'Framer' ? (lobby.pendingFramerTargets?.get(user.id) ?? null) : null;
-    const prowlerTargetUserId =
-      myRole === 'Prowler' ? (lobby.pendingProwlerTargets?.get(user.id) ?? null) : null;
-    const snatcherTargetUserId =
-      myRole === 'Snatcher'
-        ? (lobby.pendingSnatcherTargets?.get(user.id) ?? null)
-        : null;
-    const cursedTargetUserId =
-      myRole === 'Cursed' ? (lobby.pendingCursedTargets?.get(user.id) ?? null) : null;
-    const mimicTargetUserId =
-      myRole === 'Mimic'
-        ? (lobby.pendingMimicTargets?.get(user.id) ?? null)
-        : null;
-    const nightKillTargetUserId =
-      myRole === 'AlphaWolf'
-        ? (lobby.pendingAlphaWolfKillTargetId ?? null)
-        : myRole === 'Werewolf'
-          ? (lobby.pendingWerewolfKillTargetId ?? null)
-          : myRole === 'Hunter'
-            ? (lobby.pendingHunterKillTargets?.get(user.id) ?? null)
-            : null;
-
     return ack({
       ok: true,
       game: {
-        started: lobby.started,
-        phase: lobby.gamePhase ?? 'lobby',
-        dayNumber: lobby.dayNumber ?? null,
-        nightNumber: lobby.nightNumber ?? null,
-        phaseEndsAt: lobby.phaseEndsAt ?? null,
-        currentNightDeathReveal: lobby.currentNightDeathReveal ?? null,
-        currentEliminationResult: lobby.currentEliminationResult ?? null,
-        role: myRole,
-        werewolfUserIds,
-        hunterShotsRemaining:
-          myRole === 'Hunter' ? (myRoleState.hunterShotsRemaining ?? 0) : null,
-        trapperAlertsRemaining: myRole === 'Trapper' ? (myRoleState.trapperAlertsRemaining ?? 0) : null,
-        trapperAlertActive:
-          myRole === 'Trapper'
-            ? (lobby.pendingTrapperAlertUserIds?.has(user.id) ?? false)
-            : false,
-        nightKillTargetUserId,
-        escortVisitTargetUserId,
-        bodyguardGuardTargetUserId,
-        doctorProtectTargetUserId,
-        doctorSelfProtectUsed: myRole === 'Doctor' ? (myRoleState.doctorSelfProtectUsed ?? false) : null,
-        trackerWatchTargetUserId,
-        lookoutWatchTargetUserId,
-        investigatorVisitTargetUserId,
-        framerTargetUserId,
-        prowlerTargetUserId,
-        snatcherTargetUserId,
-        cursedTargetUserId,
-        mimicTargetUserId,
-        executionerTargetUserId,
-        executionerTargetName,
-        hostUserId: lobby.hostUserId,
-        canWriteNotebook: !lobby.eliminatedUserIds?.has(user.id),
+        ...buildGameInitPayloadForUser({ lobby, userId: user.id }),
       },
     });
   });
@@ -160,6 +64,10 @@ export const registerGameHandlers = ({ io, socket, user }) => {
       },
     });
   });
+
+  /* ---------------------------------------------------------------------------
+     Night Actions
+  --------------------------------------------------------------------------- */
 
   socket.on('game:nightKill', (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
@@ -729,6 +637,10 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     return ack({ ok: true, active: true });
   });
 
+  /* ---------------------------------------------------------------------------
+     Voting
+  --------------------------------------------------------------------------- */
+
   socket.on('game:castVote', (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
@@ -762,6 +674,10 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     return ack({ ok: true });
   });
 
+  /* ---------------------------------------------------------------------------
+     Notes
+  --------------------------------------------------------------------------- */
+
   socket.on('game:updateNotebook', (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
@@ -778,6 +694,10 @@ export const registerGameHandlers = ({ io, socket, user }) => {
     lobby.playerNotebooks.set(user.id, notes.slice(0, 5000));
     return ack({ ok: true });
   });
+
+  /* ---------------------------------------------------------------------------
+     Host / Admin
+  --------------------------------------------------------------------------- */
 
   socket.on('game:setPlayerEliminated', (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);

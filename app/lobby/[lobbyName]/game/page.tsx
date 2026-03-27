@@ -4,28 +4,16 @@ import GameNotebook from '@/components/game/GameNotebook';
 import EliminationResultsCard from '@/components/game/EliminationResultsCard';
 import EndGameScene from '@/components/game/EndGameScene';
 import GameChat from '@/components/game/GameChat';
+import MemberActionRow from '@/components/game/MemberActionRow';
 import NightResultsScene from '@/components/game/NightResultsScene';
 import NotebookModal from '@/components/game/NotebookModal';
 import PhaseTimer from '@/components/game/PhaseTimer';
 import PlayerList from '@/components/game/PlayerList';
+import RoleInfoPopover from '@/components/game/RoleInfoPopover';
 import RoleRevealScene from '@/components/game/RoleRevealScene';
 import {
-  bodyguardGuard,
-  castVote,
-  curse,
-  doctorProtect,
   endGame,
-  escortVisit,
-  frame,
-  getNotebook,
   initGame,
-  investigate,
-  lookoutWatch,
-  nightKill,
-  mimic,
-  prowl,
-  snatch,
-  trackerWatch,
   toggleTrapperAlert,
   updateNotebook,
 } from '@/lib/gameSocketActions';
@@ -40,15 +28,51 @@ import type {
   NotebookView,
   SocketAck,
 } from '@/models/game';
-import type { EliminationResult, LobbyMember } from '@/models/lobby';
+import type { EliminationResult } from '@/models/lobby';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+
+type GameSnapshot = NonNullable<GameInitResponse['game']>;
+
+const getSelectedNightTargetFromSnapshot = (game: GameSnapshot) => {
+  switch (game.role) {
+    case 'AlphaWolf':
+    case 'Werewolf':
+    case 'Hunter':
+      return game.nightKillTargetUserId ?? null;
+    case 'Escort':
+      return game.escortVisitTargetUserId ?? null;
+    case 'Bodyguard':
+      return game.bodyguardGuardTargetUserId ?? null;
+    case 'Doctor':
+      return game.doctorProtectTargetUserId ?? null;
+    case 'Tracker':
+      return game.trackerWatchTargetUserId ?? null;
+    case 'Lookout':
+      return game.lookoutWatchTargetUserId ?? null;
+    case 'Investigator':
+      return game.investigatorVisitTargetUserId ?? null;
+    case 'Framer':
+      return game.framerTargetUserId ?? null;
+    case 'Prowler':
+      return game.prowlerTargetUserId ?? null;
+    case 'Snatcher':
+      return game.snatcherTargetUserId ?? null;
+    case 'Cursed':
+      return game.cursedTargetUserId ?? null;
+    case 'Mimic':
+      return game.mimicTargetUserId ?? null;
+    default:
+      return null;
+  }
+};
 
 export default function LobbyGamePage() {
   const router = useRouter();
   const { data: session } = useSession();
   const { lobbyName } = useParams<{ lobbyName: string }>();
+  const lobbyNameString = typeof lobbyName === 'string' ? lobbyName : undefined;
   const { lobbyInfo } = useLobbyRealtime(lobbyName);
   const [nowMs, setNowMs] = useState<number | null>(null);
   const navigatedToResultsRef = useRef(false);
@@ -56,6 +80,7 @@ export default function LobbyGamePage() {
   useEffect(() => {
     if (!lobbyName || typeof lobbyName !== 'string') return;
     if (!socket.connected) socket.connect();
+    // Server-side presence and view tracking.
     socket.emit('presence:setView', { lobbyName, view: 'game' });
   }, [lobbyName]);
 
@@ -95,127 +120,70 @@ export default function LobbyGamePage() {
   const [selectedVoteTargetId, setSelectedVoteTargetId] = useState<
     string | null
   >(null);
-  const [roleInfoPinnedOpen, setRoleInfoPinnedOpen] = useState(false);
-  const [roleInfoHovered, setRoleInfoHovered] = useState(false);
+
+  // Apply a server-provided snapshot (via `game:init`) into local UI state.
+  // This is used on first load and again when lobby realtime state changes to keep the UI resilient to refreshes.
+  const applyCommonSnapshot = useCallback((game: GameSnapshot) => {
+    setRole(game.role);
+    setCanWriteNotebook(game.canWriteNotebook);
+    setWerewolfUserIds(game.werewolfUserIds ?? []);
+    setHunterShotsRemaining(game.hunterShotsRemaining ?? 0);
+    setTrapperAlertsRemaining(game.trapperAlertsRemaining ?? 0);
+    setTrapperAlertActive(game.trapperAlertActive ?? false);
+    setDoctorSelfProtectUsed(game.doctorSelfProtectUsed ?? false);
+    setSelectedNightActionTargetId(getSelectedNightTargetFromSnapshot(game));
+    setExecutionerTargetName(game.executionerTargetName ?? null);
+    setExecutionerTargetUserId(game.executionerTargetUserId ?? null);
+    setGameHostUserId(game.hostUserId);
+  }, []);
+
+  const applyFullSnapshot = useCallback((game: GameSnapshot) => {
+    setGameStarted(game.started);
+    setPhase(game.phase);
+    setDayNumber(game.dayNumber);
+    setNightNumber(game.nightNumber);
+    setPhaseEndsAt(game.phaseEndsAt);
+    setCurrentNightDeathReveal(game.currentNightDeathReveal ?? null);
+    setCurrentEliminationResult(game.currentEliminationResult ?? null);
+    applyCommonSnapshot(game);
+  }, [applyCommonSnapshot]);
 
   useEffect(() => {
-    if (!lobbyName) return;
+    if (!lobbyNameString) return;
 
-    initGame(lobbyName, (response: GameInitResponse) => {
+    initGame(lobbyNameString, (response: GameInitResponse) => {
       if (!response?.ok || !response.game) {
         console.error(response?.error ?? 'Failed to initialize game');
         return;
       }
-      const game = response.game;
-      setGameStarted(game.started);
-      setPhase(game.phase);
-      setDayNumber(game.dayNumber);
-      setNightNumber(game.nightNumber);
-      setPhaseEndsAt(game.phaseEndsAt);
-      setCurrentNightDeathReveal(game.currentNightDeathReveal ?? null);
-      setCurrentEliminationResult(game.currentEliminationResult ?? null);
-      setRole(game.role);
-      setWerewolfUserIds(game.werewolfUserIds ?? []);
-      setGameHostUserId(game.hostUserId);
-      setCanWriteNotebook(game.canWriteNotebook);
-      setHunterShotsRemaining(game.hunterShotsRemaining ?? 0);
-      setTrapperAlertsRemaining(game.trapperAlertsRemaining ?? 0);
-      setTrapperAlertActive(game.trapperAlertActive ?? false);
-      setDoctorSelfProtectUsed(game.doctorSelfProtectUsed ?? false);
-      setSelectedNightActionTargetId((previous) =>
-        game.role === 'AlphaWolf' ||
-        game.role === 'Werewolf' ||
-        game.role === 'Hunter'
-          ? (game.nightKillTargetUserId ?? null)
-          : game.role === 'Escort'
-            ? (game.escortVisitTargetUserId ?? null)
-            : game.role === 'Bodyguard'
-              ? (game.bodyguardGuardTargetUserId ?? null)
-              : game.role === 'Doctor'
-                ? (game.doctorProtectTargetUserId ?? null)
-                : game.role === 'Tracker'
-                  ? (game.trackerWatchTargetUserId ?? null)
-                  : game.role === 'Lookout'
-                    ? (game.lookoutWatchTargetUserId ?? null)
-                    : game.role === 'Investigator'
-                      ? (game.investigatorVisitTargetUserId ?? null)
-                      : game.role === 'Framer'
-                        ? (game.framerTargetUserId ?? null)
-                        : game.role === 'Prowler'
-                          ? (game.prowlerTargetUserId ?? null)
-                          : game.role === 'Snatcher'
-                            ? (game.snatcherTargetUserId ?? null)
-                            : game.role === 'Cursed'
-                              ? (game.cursedTargetUserId ?? null)
-                              : game.role === 'Mimic'
-                                ? (game.mimicTargetUserId ?? null)
-                                : previous,
-      );
-      setExecutionerTargetName(game.executionerTargetName ?? null);
-      setExecutionerTargetUserId(game.executionerTargetUserId ?? null);
+      applyFullSnapshot(response.game);
     });
-  }, [lobbyName]);
+  }, [applyFullSnapshot, lobbyNameString]);
 
   useEffect(() => {
-    if (!lobbyName || !lobbyInfo) return;
-    initGame(lobbyName, (response: GameInitResponse) => {
+    if (!lobbyNameString || !lobbyInfo) return;
+    initGame(lobbyNameString, (response: GameInitResponse) => {
       if (!response?.ok || !response.game) return;
-      const game = response.game;
-      setRole(game.role);
-      setCanWriteNotebook(game.canWriteNotebook);
-      setWerewolfUserIds(game.werewolfUserIds ?? []);
-      setHunterShotsRemaining(game.hunterShotsRemaining ?? 0);
-      setTrapperAlertsRemaining(game.trapperAlertsRemaining ?? 0);
-      setTrapperAlertActive(game.trapperAlertActive ?? false);
-      setDoctorSelfProtectUsed(game.doctorSelfProtectUsed ?? false);
-      setSelectedNightActionTargetId((previous) =>
-        game.role === 'AlphaWolf' ||
-        game.role === 'Werewolf' ||
-        game.role === 'Hunter'
-          ? (game.nightKillTargetUserId ?? null)
-          : game.role === 'Escort'
-            ? (game.escortVisitTargetUserId ?? null)
-            : game.role === 'Bodyguard'
-              ? (game.bodyguardGuardTargetUserId ?? null)
-              : game.role === 'Doctor'
-                ? (game.doctorProtectTargetUserId ?? null)
-                : game.role === 'Tracker'
-                  ? (game.trackerWatchTargetUserId ?? null)
-                  : game.role === 'Lookout'
-                    ? (game.lookoutWatchTargetUserId ?? null)
-                    : game.role === 'Investigator'
-                      ? (game.investigatorVisitTargetUserId ?? null)
-                      : game.role === 'Framer'
-                        ? (game.framerTargetUserId ?? null)
-                        : game.role === 'Prowler'
-                          ? (game.prowlerTargetUserId ?? null)
-                          : game.role === 'Snatcher'
-                            ? (game.snatcherTargetUserId ?? null)
-                            : game.role === 'Cursed'
-                              ? (game.cursedTargetUserId ?? null)
-                              : game.role === 'Mimic'
-                                ? (game.mimicTargetUserId ?? null)
-                                : previous,
-      );
-      setExecutionerTargetName(game.executionerTargetName ?? null);
-      setExecutionerTargetUserId(game.executionerTargetUserId ?? null);
+      applyCommonSnapshot(response.game);
     });
-  }, [lobbyName, lobbyInfo]);
+  }, [applyCommonSnapshot, lobbyNameString, lobbyInfo]);
 
   useEffect(() => {
-    if (!lobbyName) return;
+    if (!lobbyNameString) return;
     if (lobbyInfo?.gamePhase !== 'gameResults') return;
     if (navigatedToResultsRef.current) return;
     navigatedToResultsRef.current = true;
 
+    // Give the results overlay time to fade out before route transition.
     const id = setTimeout(() => {
-      router.replace(`/lobby/${encodeURIComponent(lobbyName)}/results`);
+      router.replace(`/lobby/${encodeURIComponent(lobbyNameString)}/results`);
     }, 900);
     return () => clearTimeout(id);
-  }, [lobbyInfo?.gamePhase, lobbyName, router]);
+  }, [lobbyInfo?.gamePhase, lobbyNameString, router]);
 
   const started = lobbyInfo?.started ?? gameStarted;
   const currentPhase = lobbyInfo?.gamePhase ?? phase;
+  // "nightActionResults" is presented as night, but player actions are still gated by `currentPhase === 'night'`.
   const effectiveDisplayPhase =
     currentPhase === 'nightActionResults' ? 'night' : currentPhase;
   const currentDayNumber = lobbyInfo?.dayNumber ?? dayNumber;
@@ -224,6 +192,7 @@ export default function LobbyGamePage() {
   const revealDeath =
     lobbyInfo?.currentNightDeathReveal ?? currentNightDeathReveal;
   const revealDeathUserId = revealDeath?.userId ?? null;
+  // Used to restart the animated night-results sequence when the revealed death changes.
   const nightResultsSequenceKey = revealDeathUserId
     ? `death-${revealDeathUserId}`
     : `none-${currentNightNumber ?? 0}`;
@@ -247,6 +216,7 @@ export default function LobbyGamePage() {
       ? Math.max(0, Math.ceil((lobbyInfo.startingAt - nowMs) / 1000))
       : null;
 
+  // Drives cinematic fades + role/night reveal animations based on the authoritative phase timers.
   const { revealState, nightResultRevealState, phaseOverlayState } =
     useGamePhaseAnimation({
       currentPhase,
@@ -291,38 +261,6 @@ export default function LobbyGamePage() {
 
     return roleInfo?.nightInstruction ?? 'You have no night action tonight.';
   })();
-
-  /*
-  const legacyNightInstruction = !selfAlive
-    ? 'You are dead. You cannot act, but you can observe.'
-    : roleName === 'Werewolf'
-      ? 'Choose a player to kill. Coordinate with other werewolves in secret chat.'
-      : roleName === 'Doctor'
-        ? 'Choose a player to protect from a kill tonight.'
-        : roleName === 'Bodyguard'
-          ? 'Choose a player to guard. You will intercept a hostile attack aimed at them.'
-          : roleName === 'Escort'
-            ? 'Choose a player to roleblock so their night action fails.'
-            : roleName === 'Tracker'
-              ? 'Choose a player to track. You will learn who they visited.'
-              : roleName === 'Lookout'
-                ? 'Choose a player to watch. You will learn who visited them.'
-                : roleName === 'Investigator'
-                  ? 'Choose a player to investigate. You will receive a list of possible roles.'
-                  : roleName === 'Hunter'
-                    ? hunterShotsRemaining > 0
-                      ? `Choose a player to shoot. Shots remaining: ${hunterShotsRemaining}.`
-                      : 'You have no shots remaining tonight.'
-                    : roleName === 'Trapper'
-                      ? trapperAlertsRemaining > 0
-                        ? `Use “Activate Alert” to set a trap on yourself tonight. Alerts remaining: ${trapperAlertsRemaining}.`
-                        : 'You have no alerts remaining tonight.'
-                      : roleName === 'Executioner'
-                        ? 'You have no night action. Push your target during the day vote.'
-                        : roleName === 'Jester'
-                          ? 'You have no night action. Try to get yourself executed during the day.'
-                          : 'You have no night action tonight.';
-  */
   const phaseSubInstruction =
     effectiveDisplayPhase === 'day'
       ? (currentDayNumber ?? 0) === 0
@@ -353,25 +291,22 @@ export default function LobbyGamePage() {
 
   useEffect(() => {
     const id = setTimeout(() => {
-      if (currentPhase !== 'vote') {
-        setSelectedVoteTargetId(null);
-      }
-      if (effectiveDisplayPhase !== 'night') {
-        setSelectedNightActionTargetId(null);
-      }
+      if (currentPhase !== 'vote') setSelectedVoteTargetId(null);
+      if (effectiveDisplayPhase !== 'night') setSelectedNightActionTargetId(null);
     }, 0);
     return () => clearTimeout(id);
   }, [currentPhase, effectiveDisplayPhase]);
 
   useEffect(() => {
     if (started) return;
-    if (!lobbyName) return;
+    if (!lobbyNameString) return;
     if (lobbyInfo?.startingAt) return;
-    router.push(`/lobby/${encodeURIComponent(lobbyName)}`);
-  }, [lobbyInfo?.startingAt, started, lobbyName, router]);
+    router.push(`/lobby/${encodeURIComponent(lobbyNameString)}`);
+  }, [lobbyInfo?.startingAt, started, lobbyNameString, router]);
 
   useEffect(() => {
     if (!lobbyInfo?.startingAt) return;
+    // Local clock tick for displaying "Starting in N seconds" without relying on server pushes.
     const kickoffId = setTimeout(() => {
       setNowMs(Date.now());
     }, 0);
@@ -386,6 +321,7 @@ export default function LobbyGamePage() {
 
   const isHost =
     !!session?.user?.id && !!hostUserId && session.user.id === hostUserId;
+  // Forces `GameChat` to refresh when phase/role/alive status changes (and thus the user's chat audience changes).
   const chatRefreshKey = `${currentPhase}:${roleName}:${selfAlive ? 'alive' : 'dead'}:${started ? 'started' : 'stopped'}`;
   const roleToneClass =
     roleInfo?.faction === 'Enemy'
@@ -398,8 +334,8 @@ export default function LobbyGamePage() {
       type="button"
       className="game-button-secondary max-w-xs mx-auto"
       onClick={() => {
-        if (!lobbyName) return;
-        endGame(lobbyName, (err: unknown, res: SocketAck | undefined) => {
+        if (!lobbyNameString) return;
+        endGame(lobbyNameString, (err: unknown, res: SocketAck | undefined) => {
           if (err || !res?.ok) {
             console.error(res?.error ?? 'Failed to end game');
           }
@@ -409,385 +345,6 @@ export default function LobbyGamePage() {
       End Game (Temporary)
     </button>
   ) : null;
-
-  const showRoleInfo = roleInfoPinnedOpen || roleInfoHovered;
-
-  const renderRoleInfo = () => (
-    <div className="relative inline-flex items-center z-40">
-      <button
-        type="button"
-        aria-label={`${roleDisplayName} role info`}
-        aria-expanded={showRoleInfo}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-500/60 text-[11px] font-bold text-slate-200 hover:bg-slate-700/60 focus:outline-none focus:ring-2 focus:ring-sky-400"
-        onMouseEnter={() => setRoleInfoHovered(true)}
-        onMouseLeave={() => setRoleInfoHovered(false)}
-        onFocus={() => setRoleInfoHovered(true)}
-        onBlur={() => setRoleInfoHovered(false)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            setRoleInfoPinnedOpen(false);
-          }
-        }}
-        onClick={() => setRoleInfoPinnedOpen((prev) => !prev)}
-      >
-        i
-      </button>
-      <div
-        className={[
-          'pointer-events-none absolute right-0 top-full z-50 mt-2 w-72 max-w-[calc(100vw-1rem)] rounded-md border border-slate-600 bg-slate-900/95 p-2 text-left text-xs text-slate-200 shadow-lg transition-opacity',
-          showRoleInfo ? 'opacity-100' : 'opacity-0',
-        ].join(' ')}
-      >
-        {roleInfo ? (
-          <>
-            <p className="leading-tight">{roleInfo.ability}</p>
-            <p className="mt-1 leading-tight text-amber-300">
-              Win: {roleInfo.winCondition}
-            </p>
-          </>
-        ) : (
-          <p className="leading-tight text-slate-300">
-            Role information unavailable.
-          </p>
-        )}
-        {roleName === 'Hunter' ? (
-          <p className="mt-1 leading-tight text-sky-300">
-            Shots remaining: {hunterShotsRemaining}
-          </p>
-        ) : null}
-        {roleName === 'Trapper' ? (
-          <p className="mt-1 leading-tight text-sky-300">
-            Alerts remaining: {trapperAlertsRemaining}
-          </p>
-        ) : null}
-        {roleName === 'Executioner' ? (
-          <p className="mt-1 leading-tight text-violet-300">
-            Target: {executionerTargetName ?? executionerTargetUserId ?? 'None'}
-          </p>
-        ) : null}
-      </div>
-    </div>
-  );
-
-  const renderMemberRow = (member: LobbyMember) => {
-    const canKillAtNight =
-      effectiveDisplayPhase === 'night' &&
-      (roleName === 'Werewolf' ||
-        roleName === 'AlphaWolf' ||
-        (roleName === 'Hunter' && hunterShotsRemaining > 0)) &&
-      selfAlive &&
-      member.alive &&
-      member.userId !== currentUserId;
-    const canEscortAtNight =
-      effectiveDisplayPhase === 'night' &&
-      roleName === 'Escort' &&
-      selfAlive &&
-      member.alive &&
-      member.userId !== currentUserId;
-    const canGuardAtNight =
-      effectiveDisplayPhase === 'night' &&
-      roleName === 'Bodyguard' &&
-      selfAlive &&
-      member.alive &&
-      member.userId !== currentUserId;
-    const canProtectAtNight =
-      effectiveDisplayPhase === 'night' &&
-      roleName === 'Doctor' &&
-      selfAlive &&
-      member.alive &&
-      (member.userId !== currentUserId || !doctorSelfProtectUsed);
-    const canTrackAtNight =
-      effectiveDisplayPhase === 'night' &&
-      roleName === 'Tracker' &&
-      selfAlive &&
-      member.alive &&
-      member.userId !== currentUserId;
-    const canLookoutAtNight =
-      effectiveDisplayPhase === 'night' &&
-      roleName === 'Lookout' &&
-      selfAlive &&
-      member.alive;
-    const canInvestigateAtNight =
-      effectiveDisplayPhase === 'night' &&
-      roleName === 'Investigator' &&
-      selfAlive &&
-      member.alive &&
-      member.userId !== currentUserId;
-    const canFrameAtNight =
-      effectiveDisplayPhase === 'night' &&
-      roleName === 'Framer' &&
-      selfAlive &&
-      member.alive;
-    const canScoutAtNight =
-      effectiveDisplayPhase === 'night' &&
-      roleName === 'Prowler' &&
-      selfAlive &&
-      member.alive &&
-      member.userId !== currentUserId;
-    const canKidnapAtNight =
-      effectiveDisplayPhase === 'night' &&
-      roleName === 'Snatcher' &&
-      selfAlive &&
-      member.alive &&
-      member.userId !== currentUserId;
-    const canCurseAtNight =
-      effectiveDisplayPhase === 'night' &&
-      roleName === 'Cursed' &&
-      selfAlive &&
-      member.alive;
-    const canShapeshiftAtNight =
-      effectiveDisplayPhase === 'night' &&
-      roleName === 'Mimic' &&
-      selfAlive &&
-      member.alive &&
-      member.userId !== currentUserId;
-    const canViewDeadNotebook =
-      (effectiveDisplayPhase === 'day' || effectiveDisplayPhase === 'night') &&
-      !member.alive;
-    const canVoteNow = currentPhase === 'vote' && selfAlive && member.alive;
-    const isActionable =
-      canKillAtNight ||
-      canEscortAtNight ||
-      canGuardAtNight ||
-      canProtectAtNight ||
-      canTrackAtNight ||
-      canLookoutAtNight ||
-      canInvestigateAtNight ||
-      canFrameAtNight ||
-      canScoutAtNight ||
-      canKidnapAtNight ||
-      canCurseAtNight ||
-      canShapeshiftAtNight ||
-      canViewDeadNotebook ||
-      canVoteNow;
-    const isSelectedTarget =
-      (effectiveDisplayPhase === 'night' &&
-        selectedNightActionTargetId === member.userId) ||
-      (currentPhase === 'vote' && selectedVoteTargetId === member.userId);
-
-    const isExecutionerTarget =
-      roleName === 'Executioner' && executionerTargetUserId === member.userId;
-
-    return (
-      <button
-        key={member.userId}
-        type="button"
-        disabled={!isActionable}
-        aria-label={
-          isActionable
-            ? `${member.name} is selectable`
-            : `${member.name} is not selectable right now`
-        }
-        className={[
-          'game-box relative w-full text-left transition-all duration-150',
-          isActionable
-            ? 'cursor-pointer border-sky-500/50 bg-sky-500/10 hover:bg-sky-500/20 hover:border-sky-400/70 hover:translate-y-[-1px]'
-            : 'opacity-50 cursor-not-allowed border-slate-700/50 bg-slate-900/40',
-          isSelectedTarget
-            ? 'border-amber-300/90 bg-gradient-to-r from-amber-500/16 to-sky-500/8 ring-4 ring-amber-400/35 shadow-[0_0_0_1px_rgba(251,191,36,0.55),0_0_24px_rgba(251,191,36,0.14)] translate-y-0 hover:translate-y-0'
-            : '',
-        ].join(' ')}
-        onClick={() => {
-          if (!lobbyName || typeof lobbyName !== 'string') return;
-
-          if (canKillAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              nightKill(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            nightKill(lobbyName, member.userId);
-            return;
-          }
-
-          if (canEscortAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              escortVisit(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            escortVisit(lobbyName, member.userId);
-            return;
-          }
-
-          if (canGuardAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              bodyguardGuard(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            bodyguardGuard(lobbyName, member.userId);
-            return;
-          }
-
-          if (canProtectAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              doctorProtect(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            doctorProtect(lobbyName, member.userId);
-            return;
-          }
-
-          if (canTrackAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              trackerWatch(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            trackerWatch(lobbyName, member.userId);
-            return;
-          }
-
-          if (canLookoutAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              lookoutWatch(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            lookoutWatch(lobbyName, member.userId);
-            return;
-          }
-
-          if (canInvestigateAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              investigate(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            investigate(lobbyName, member.userId);
-            return;
-          }
-
-          if (canFrameAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              frame(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            frame(lobbyName, member.userId);
-            return;
-          }
-
-          if (canScoutAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              prowl(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            prowl(lobbyName, member.userId);
-            return;
-          }
-
-          if (canKidnapAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              snatch(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            snatch(lobbyName, member.userId);
-            return;
-          }
-
-          if (canCurseAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              curse(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            curse(lobbyName, member.userId);
-            return;
-          }
-
-          if (canShapeshiftAtNight) {
-            if (currentPhase !== 'night') return;
-            if (selectedNightActionTargetId === member.userId) {
-              setSelectedNightActionTargetId(null);
-              mimic(lobbyName, member.userId);
-              return;
-            }
-            setSelectedNightActionTargetId(member.userId);
-            mimic(lobbyName, member.userId);
-            return;
-          }
-
-          if (canViewDeadNotebook) {
-            getNotebook(lobbyName, member.userId, (response) => {
-              if (!response?.ok || !response.notebook) return;
-              setViewingNotebook({
-                name: response.notebook.name,
-                content: response.notebook.content ?? '',
-              });
-            });
-            return;
-          }
-
-          if (canVoteNow) {
-            if (selectedVoteTargetId === member.userId) {
-              setSelectedVoteTargetId(null);
-              castVote(lobbyName, member.userId);
-              return;
-            }
-            setSelectedVoteTargetId(member.userId);
-            castVote(lobbyName, member.userId);
-          }
-        }}
-      >
-        <span className="flex items-center gap-3">
-          <span
-            className={[
-              'font-semibold',
-              werewolfUserIds.includes(member.userId)
-                ? 'text-red-300'
-                : isExecutionerTarget
-                  ? 'text-violet-300'
-                  : 'text-white',
-            ].join(' ')}
-          >
-            {member.name}
-          </span>
-        </span>
-        <span className="flex items-center gap-2">
-          <span
-            className={[
-              'inline-flex items-center justify-center h-7 w-7 rounded-full border',
-              member.alive
-                ? 'text-emerald-200 border-emerald-500/40 bg-emerald-500/10'
-                : 'text-red-200 border-red-500/40 bg-red-500/10',
-            ].join(' ')}
-            role="img"
-            aria-label={member.alive ? 'Alive' : 'Dead'}
-            title={member.alive ? 'Alive' : 'Dead'}
-          >
-            {member.alive ? '\u25CF' : '\u2620'}
-          </span>
-        </span>
-      </button>
-    );
-  };
 
   return (
     <>
@@ -836,7 +393,7 @@ export default function LobbyGamePage() {
             <div className="text-left">
               <p className="game-tight-label">Lobby</p>
               <h1 className="game-title text-left leading-tight">
-                {lobbyName ?? '...'}
+                {lobbyNameString ?? '...'}
               </h1>
             </div>
             <div className="game-box w-full sm:w-auto shrink-0 text-left sm:text-right sm:min-w-[11rem]">
@@ -845,7 +402,15 @@ export default function LobbyGamePage() {
                 <p className="font-semibold text-slate-100">
                   {roleDisplayName}
                 </p>
-                {renderRoleInfo()}
+                <RoleInfoPopover
+                  roleDisplayName={roleDisplayName}
+                  roleName={roleName}
+                  roleInfo={roleInfo}
+                  hunterShotsRemaining={hunterShotsRemaining}
+                  trapperAlertsRemaining={trapperAlertsRemaining}
+                  executionerTargetName={executionerTargetName}
+                  executionerTargetUserId={executionerTargetUserId}
+                />
               </div>
             </div>
           </header>
@@ -892,8 +457,8 @@ export default function LobbyGamePage() {
                       (!trapperAlertActive && trapperAlertsRemaining <= 0)
                     }
                     onClick={() => {
-                      if (!lobbyName || currentPhase !== 'night') return;
-                      toggleTrapperAlert(lobbyName);
+                      if (!lobbyNameString || currentPhase !== 'night') return;
+                      toggleTrapperAlert(lobbyNameString);
                     }}
                   >
                     {trapperAlertActive ? (
@@ -928,7 +493,27 @@ export default function LobbyGamePage() {
 
             <PlayerList
               members={sortedMembers}
-              renderMemberRow={renderMemberRow}
+              renderMemberRow={(member) => (
+                <MemberActionRow
+                  key={member.userId}
+                  lobbyName={lobbyNameString}
+                  member={member}
+                  currentPhase={currentPhase}
+                  effectiveDisplayPhase={effectiveDisplayPhase}
+                  roleName={roleName}
+                  selfAlive={selfAlive}
+                  currentUserId={session?.user?.id}
+                  werewolfUserIds={werewolfUserIds}
+                  hunterShotsRemaining={hunterShotsRemaining}
+                  doctorSelfProtectUsed={doctorSelfProtectUsed}
+                  executionerTargetUserId={executionerTargetUserId}
+                  selectedNightActionTargetId={selectedNightActionTargetId}
+                  setSelectedNightActionTargetId={setSelectedNightActionTargetId}
+                  selectedVoteTargetId={selectedVoteTargetId}
+                  setSelectedVoteTargetId={setSelectedVoteTargetId}
+                  setViewingNotebook={setViewingNotebook}
+                />
+              )}
             />
             <EliminationResultsCard
               currentPhase={currentPhase}
@@ -943,7 +528,7 @@ export default function LobbyGamePage() {
       currentPhase !== 'endGame' &&
       currentPhase !== 'gameResults' ? (
         <GameChat
-          lobbyName={typeof lobbyName === 'string' ? lobbyName : undefined}
+          lobbyName={lobbyNameString}
           refreshKey={chatRefreshKey}
           currentUserId={session?.user?.id}
         />
@@ -952,12 +537,12 @@ export default function LobbyGamePage() {
       currentPhase !== 'endGame' &&
       currentPhase !== 'gameResults' ? (
         <GameNotebook
-          lobbyName={typeof lobbyName === 'string' ? lobbyName : undefined}
+          lobbyName={lobbyNameString}
           userId={session?.user?.id}
           canWrite={canWriteNotebook}
           onNotesChange={(notes) => {
-            if (!lobbyName) return;
-            updateNotebook(lobbyName, notes);
+            if (!lobbyNameString) return;
+            updateNotebook(lobbyNameString, notes);
           }}
         />
       ) : null}
@@ -970,7 +555,7 @@ export default function LobbyGamePage() {
       <div
         key={phaseOverlayState.key}
         className={[
-          'pointer-events-none fixed inset-0 z-40 bg-black',
+          'game-phase-overlay z-40',
           phaseOverlayState.mode === 'fadeIn'
             ? 'phase-overlay-fade-in'
             : phaseOverlayState.mode === 'fadeOut'
@@ -981,7 +566,7 @@ export default function LobbyGamePage() {
       {currentPhase === 'gameResults' ? (
         <div
           key="results-route-fadeout"
-          className="pointer-events-none fixed inset-0 z-50 bg-black phase-overlay-fade-out"
+          className="game-phase-overlay z-50 phase-overlay-fade-out"
         />
       ) : null}
     </>
