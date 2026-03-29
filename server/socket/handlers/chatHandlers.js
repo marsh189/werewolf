@@ -3,10 +3,11 @@ import {
   buildChatStateForUser,
   canSendChatChannelMessage,
   emitChatMessage,
+  isRapidAction,
   parseChatChannel,
   sanitizeChatContent,
-} from '../chatService.js';
-import { isRapidAction } from '../actionThrottleService.js';
+} from '../../services/index.js';
+import { CLIENT_EVENTS } from '../events.js';
 import { requireAckAndLobby, requireLobbyMembership } from './shared.js';
 
 export const registerChatHandlers = ({ io, socket, user }) => {
@@ -16,7 +17,7 @@ export const registerChatHandlers = ({ io, socket, user }) => {
      Socket events for initializing chat state and sending messages.
   ============================================================================= */
 
-  socket.on('chat:init', (data, callback) => {
+  socket.on(CLIENT_EVENTS.CHAT_INIT, (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
     if (!requireLobbyMembership(lobby, user.id, ack)) return;
@@ -27,7 +28,7 @@ export const registerChatHandlers = ({ io, socket, user }) => {
     });
   });
 
-  socket.on('chat:send', (data, callback) => {
+  socket.on(CLIENT_EVENTS.CHAT_SEND, (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
     if (!requireLobbyMembership(lobby, user.id, ack)) return;

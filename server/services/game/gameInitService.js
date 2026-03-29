@@ -6,14 +6,7 @@
    fields like werewolf user ids and the user's current selected night target).
 ============================================================================= */
 
-const isWerewolfRole = (role) =>
-  role === 'Werewolf' ||
-  role === 'AlphaWolf' ||
-  role === 'Framer' ||
-  role === 'Prowler' ||
-  role === 'Cursed' ||
-  role === 'Snatcher' ||
-  role === 'Mimic';
+import { isWerewolfRole } from './rolesService.js';
 
 const getSelectedNightTargetUserId = ({ lobby, userId, myRole }) => {
   if (myRole === 'AlphaWolf') return lobby.pendingAlphaWolfKillTargetId ?? null;

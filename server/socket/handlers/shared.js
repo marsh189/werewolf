@@ -1,6 +1,6 @@
-import { getLobby, getUserLobby } from '../state.js';
-import { getAck, parseLobbyName } from '../lobbyService.js';
-import { parseTargetUserId } from '../validators.js';
+import { getLobby, getUserLobby } from '../../state/state.js';
+import { parseTargetUserId } from '../../validation/validators.js';
+import { getAck, parseLobbyName } from '../utils.js';
 
 /* =============================================================================
    Handler Guards (Shared)
@@ -51,4 +51,42 @@ export const requireTargetUserId = (data, ack) => {
     return null;
   }
   return targetUserId;
+};
+
+/* -----------------------------------------------------------------------------
+   Game / Phase Guards
+----------------------------------------------------------------------------- */
+
+export const requireGamePhase = (lobby, phase, ack, error) => {
+  if (lobby.gamePhase !== phase) {
+    ack({ ok: false, error });
+    return false;
+  }
+  return true;
+};
+
+export const requireAliveActor = (
+  lobby,
+  userId,
+  ack,
+  error = 'Dead players cannot act',
+) => {
+  if (lobby.eliminatedUserIds?.has(userId)) {
+    ack({ ok: false, error });
+    return false;
+  }
+  return true;
+};
+
+export const requireAliveTargetMember = (
+  lobby,
+  targetUserId,
+  ack,
+  error = 'Target must be alive and in lobby',
+) => {
+  if (!lobby.members.has(targetUserId) || lobby.eliminatedUserIds?.has(targetUserId)) {
+    ack({ ok: false, error });
+    return false;
+  }
+  return true;
 };

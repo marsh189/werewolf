@@ -1,5 +1,6 @@
-import { getLobby, getUserLobby } from './state.js';
-import { endGameForLobby, emitLobbyUpdate } from './lobbyService.js';
+import { getLobby, getUserLobby } from '../../state/state.js';
+import { endGameForLobby } from '../lobbyService.js';
+import { emitLobbyUpdate } from '../lobbyEmitService.js';
 
 /* =============================================================================
    In-Game Presence Tracking
@@ -86,4 +87,3 @@ export const handleInGamePresenceDisconnect = ({ io, socket, userId }) => {
   maybeAutoResetEndedGame(io, previousLobby);
   emitLobbyUpdate(io, previousLobby);
 };
-

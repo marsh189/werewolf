@@ -1,32 +1,31 @@
-import { getLobby, getUserLobby, hasLobby } from '../state.js';
+import { getLobby, getUserLobby, hasLobby } from '../../state/state.js';
 import {
   buildLobbyInfo,
   createLobby,
   emitLobbyUpdate,
-  getAck,
+  endGameForLobby,
   getLobbies,
+  handleInGamePresenceDisconnect,
   joinLobby,
   leaveLobby,
   removeUserFromLobby,
-  parseLobbyName,
   scheduleGameStart,
-} from '../lobbyService.js';
+  setSocketViewPresence,
+} from '../../services/index.js';
+import { getAck, parseLobbyName } from '../utils.js';
 import {
   parseLobbyNameInput,
   sanitizeNeutralRolesEnabled,
   sanitizePhaseDurations,
   sanitizeSpecialRolesEnabled,
   sanitizeWerewolfCount,
-} from '../validators.js';
+} from '../../validation/validators.js';
 import {
   requireAckAndLobby,
   requireHost,
   requireSameCurrentLobby,
 } from './shared.js';
-import {
-  handleInGamePresenceDisconnect,
-  setSocketViewPresence,
-} from '../presenceService.js';
+import { CLIENT_EVENTS } from '../events.js';
 
 export const registerLobbyHandlers = ({ io, socket, user }) => {
   /* =============================================================================
@@ -38,15 +37,9 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
      - presence tracking (which screen the user is viewing)
   ============================================================================= */
 
-  socket.on('joinLobby', (data, callback) => {
-    const ack = getAck(callback);
-    const name = parseLobbyName(data);
-    if (!name) {
-      return ack({ ok: false, error: 'Invalid Lobby Name' });
-    }
-
-    const lobby = getLobby(name);
-    if (!lobby) return ack({ ok: false, error: 'Lobby does not exist' });
+  socket.on(CLIENT_EVENTS.JOIN_LOBBY, (data, callback) => {
+    const { ack, name, lobby } = requireAckAndLobby(data, callback);
+    if (!name || !lobby) return;
     if (lobby.started) {
       return ack({ ok: false, error: 'Game already started' });
     }
@@ -60,7 +53,7 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     return ack({ ok: true, lobbyName: name });
   });
 
-  socket.on('createLobby', ({ lobbyName }, callback) => {
+  socket.on(CLIENT_EVENTS.CREATE_LOBBY, ({ lobbyName }, callback) => {
     const ack = getAck(callback);
     const name = parseLobbyNameInput({ lobbyName });
 
@@ -78,7 +71,7 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     return ack({ ok: true, lobbyName: name });
   });
 
-  socket.on('initiateLobby', (data, callback) => {
+  socket.on(CLIENT_EVENTS.INITIATE_LOBBY, (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
 
@@ -93,7 +86,7 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     return ack({ ok: true, lobbyInfo: buildLobbyInfo(lobby) });
   });
 
-  socket.on('lobby:verify', (data, callback) => {
+  socket.on(CLIENT_EVENTS.LOBBY_VERIFY, (data, callback) => {
     const { ack, name, lobby } = requireAckAndLobby(data, callback);
     if (!name || !lobby) return;
 
@@ -118,10 +111,9 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
      - auto-reset ended games when nobody is viewing them anymore
   --------------------------------------------------------------------------- */
 
-  socket.on('presence:setView', (data, callback) => {
-    const ack = getAck(callback);
-    const name = parseLobbyName(data);
-    if (!name) return ack({ ok: false, error: 'Invalid Lobby Name' });
+  socket.on(CLIENT_EVENTS.PRESENCE_SET_VIEW, (data, callback) => {
+    const { ack, name, lobby } = requireAckAndLobby(data, callback);
+    if (!name || !lobby) return;
 
     const { view } = data ?? {};
     if (view !== 'lobby' && view !== 'game' && view !== 'results') {
@@ -132,24 +124,24 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
       io,
       socket,
       userId: user.id,
-      lobbyName: name,
+      lobbyName: lobby.name,
       view,
     });
     if (!result.ok) return ack(result);
     return ack({ ok: true });
   });
 
-  socket.on('lobbiesList', (_, callback) => {
+  socket.on(CLIENT_EVENTS.LOBBIES_LIST, (_, callback) => {
     callback?.({ ok: true, lobbies: getLobbies() });
   });
 
-  socket.on('leaveLobby', (data) => {
+  socket.on(CLIENT_EVENTS.LEAVE_LOBBY, (data) => {
     const name = parseLobbyName(data);
     if (!name) return;
     leaveLobby(io, socket, name);
   });
 
-  socket.on('startGame', (data, callback) => {
+  socket.on(CLIENT_EVENTS.START_GAME, (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
     if (!requireHost(lobby, user.id)) {
@@ -163,7 +155,7 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     return ack({ ok: true, startingAt });
   });
 
-  socket.on('endGame', (data, callback) => {
+  socket.on(CLIENT_EVENTS.END_GAME, (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
     if (!lobby.members.has(user.id)) {
@@ -177,7 +169,7 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     return ack({ ok: true });
   });
 
-  socket.on('lobby:updateSettings', (data, callback) => {
+  socket.on(CLIENT_EVENTS.LOBBY_UPDATE_SETTINGS, (data, callback) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
     if (!requireHost(lobby, user.id)) {

@@ -1,3 +1,6 @@
+import { SERVER_EVENTS } from '../../socket/events.js';
+import { isWerewolfRole } from '../game/rolesService.js';
+
 const CHAT_HISTORY_LIMIT = 60;
 const CHAT_MESSAGE_MAX_LENGTH = 300;
 
@@ -31,17 +34,6 @@ const VILLAGE_CHAT_VISIBLE_PHASES = new Set([
   'vote',
   'eliminationResults',
 ]);
-
-const WEREWOLF_ROLE_SET = new Set([
-  'Werewolf',
-  'AlphaWolf',
-  'Framer',
-  'Prowler',
-  'Cursed',
-  'Snatcher',
-  'Mimic',
-]);
-
 /* -----------------------------------------------------------------------------
    State Helpers
 ----------------------------------------------------------------------------- */
@@ -82,7 +74,7 @@ const isAlive = (lobby, userId) => !lobby.eliminatedUserIds?.has(userId);
 
 const isAliveWerewolf = (lobby, userId) =>
   isAlive(lobby, userId) &&
-  WEREWOLF_ROLE_SET.has(lobby.playerRoles?.get(userId));
+  isWerewolfRole(lobby.playerRoles?.get(userId));
 
 const getChatAudienceForUser = (lobby, userId) => {
   if (!lobby.members.has(userId) || lobby.started !== true) return null;
@@ -174,8 +166,6 @@ export const buildChatStateForUser = (lobby, userId) => {
    Messages (Add / Emit)
 ----------------------------------------------------------------------------- */
 
-export const syncLobbyChatRooms = () => {};
-
 const pushMessageToHistory = (chatMessages, channel, message) => {
   const channelMessages = chatMessages[channel] ?? [];
   channelMessages.push(message);
@@ -233,6 +223,6 @@ export const emitChatMessage = (io, lobby, message) => {
   for (const member of lobby.members.values()) {
     if (!member.socketId) continue;
     if (!canUserSeeMessage(lobby, member.userId, message)) continue;
-    io.to(member.socketId).emit('chat:message', message);
+    io.to(member.socketId).emit(SERVER_EVENTS.CHAT_MESSAGE, message);
   }
 };
