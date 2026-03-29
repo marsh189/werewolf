@@ -1,26 +1,43 @@
 'use client';
 
-import { useLobbyRealtime } from '@/lib/useLobbyRealtime';
+import { useLobbyRealtime } from '@/lib/hooks/useLobbyRealtime';
 import { socket } from '@/lib/socket';
+import { usePresenceView } from '@/lib/hooks/usePresenceView';
+import { connectSocketIfNeeded } from '@/lib/socket/utils';
+import { lobbyPath } from '@/lib/routes/routePaths';
 import { getRoleDisplayName } from '@/models/roles';
 import { useParams, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
+/* =============================================================================
+   Results Page
+
+   Post-game summary screen that is only valid while the lobby is in the
+   `gameResults` phase. If the lobby leaves that phase, we route back to `/lobby`.
+============================================================================= */
 export default function LobbyResultsPage() {
   const router = useRouter();
   const { lobbyName } = useParams<{ lobbyName: string }>();
   const { lobbyInfo } = useLobbyRealtime(lobbyName);
 
-  useEffect(() => {
-    if (!lobbyName || typeof lobbyName !== 'string') return;
-    if (!socket.connected) socket.connect();
-    socket.emit('presence:setView', { lobbyName, view: 'results' });
-  }, [lobbyName]);
+  /* -----------------------------------------------------------------------
+     Presence Tracking
+
+     Lets the server know this user is actively viewing the results screen.
+  ----------------------------------------------------------------------- */
+  usePresenceView(typeof lobbyName === 'string' ? lobbyName : undefined, 'results');
 
   useEffect(() => {
+    /* -----------------------------------------------------------------------
+       Results Route Guard
+
+       If the server transitions away from `gameResults`, this route is no
+       longer valid, so we send the user back to the lobby.
+    ----------------------------------------------------------------------- */
+
     if (!lobbyName || !lobbyInfo) return;
     if (lobbyInfo.gamePhase === 'gameResults') return;
-    router.replace(`/lobby/${encodeURIComponent(lobbyName)}`);
+    router.replace(lobbyPath(lobbyName));
   }, [lobbyInfo, lobbyName, router]);
 
   const results = lobbyInfo?.gameResults ?? null;
@@ -37,8 +54,8 @@ export default function LobbyResultsPage() {
   }
 
   return (
-    <div className="game-cinematic-scene min-h-[100svh] px-4 sm:px-6 py-10 sm:py-12">
-      <div className="mx-auto w-full max-w-3xl space-y-6">
+    <div className="game-cinematic-scene min-h-[100svh] flex flex-col px-4 sm:px-6 py-10 sm:py-12">
+      <div className="mx-auto w-full max-w-3xl space-y-6 flex-1">
         <header className="text-center space-y-2">
           <p className="game-tight-label">Final</p>
           <h1 className="game-title text-emerald-200">Village Victory</h1>
@@ -50,18 +67,6 @@ export default function LobbyResultsPage() {
         <div className="space-y-3">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="game-section-title">Players</h2>
-            <button
-              type="button"
-              className="game-button-secondary py-2 sm:w-auto sm:px-5"
-              onClick={() => {
-                if (!lobbyName) return;
-                if (!socket.connected) socket.connect();
-                socket.emit('presence:setView', { lobbyName, view: 'lobby' });
-                router.push(`/lobby/${encodeURIComponent(lobbyName)}`);
-              }}
-            >
-              Back to Lobby
-            </button>
           </div>
 
           <div className="space-y-2">
@@ -139,6 +144,30 @@ export default function LobbyResultsPage() {
             })}
           </div>
         </div>
+      </div>
+
+      <div className="pt-8 mt-auto w-full max-w-3xl mx-auto">
+        <button
+          type="button"
+          className="game-button-secondary"
+          onClick={() => {
+            if (!lobbyName) return;
+
+            /* -----------------------------------------------------------
+               Back To Lobby
+
+               We proactively tell the server our view changed so it can
+               make cleanup/auto-reset decisions without waiting for the
+               route transition to fully complete.
+            ----------------------------------------------------------- */
+
+            connectSocketIfNeeded();
+            socket.emit('presence:setView', { lobbyName, view: 'lobby' });
+            router.push(lobbyPath(lobbyName));
+          }}
+        >
+          Back to Lobby
+        </button>
       </div>
       <div
         key="results-fadein"

@@ -16,7 +16,7 @@ import {
   prowl,
   snatch,
   trackerWatch,
-} from '@/lib/gameSocketActions';
+} from '@/lib/actions/gameSocketActions';
 
 type MemberActionRowProps = {
   lobbyName: string | undefined;
@@ -231,4 +231,3 @@ export default function MemberActionRow({
     </button>
   );
 }
-

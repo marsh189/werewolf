@@ -1,7 +1,10 @@
 'use client';
 
-import { sendChatMessage, initChat } from '@/lib/gameSocketActions';
+import { sendChatMessage, initChat } from '@/lib/actions/gameSocketActions';
 import { socket } from '@/lib/socket';
+import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
+import { DESKTOP_MEDIA_QUERY } from '@/lib/constants/uiConstants';
+import { formatChatTimestamp } from '@/lib/formatters/timeFormatters';
 import type { ChatChannel, ChatMessage } from '@/models/game';
 import { useEffect, useRef, useState } from 'react';
 
@@ -20,14 +23,9 @@ export default function GameChat({
   refreshKey,
   currentUserId,
 }: Props) {
-  const [isDesktop, setIsDesktop] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(min-width: 640px)').matches;
-  });
-  const [isOpen, setIsOpen] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(min-width: 640px)').matches;
-  });
+  const isDesktop = useMediaQuery(DESKTOP_MEDIA_QUERY);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const isOpen = isDesktop ? true : mobileOpen;
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [history, setHistory] = useState<Partial<Record<ChatChannel, ChatMessage[]>>>(
     {},
@@ -38,18 +36,6 @@ export default function GameChat({
   const [error, setError] = useState<string | null>(null);
   const messagePaneRef = useRef<HTMLDivElement | null>(null);
   const shouldStickToBottomRef = useRef(true);
-
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const media = window.matchMedia('(min-width: 640px)');
-    const update = () => {
-      setIsDesktop(media.matches);
-      setIsOpen((current) => (media.matches ? true : current));
-    };
-    update();
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, []);
 
   useEffect(() => {
     if (!lobbyName) return;
@@ -89,6 +75,13 @@ export default function GameChat({
       callback?.({ ok: true });
     };
 
+    /* -----------------------------------------------------------------------
+       Server Push Subscription: `chat:message`
+
+       Payload: `ChatMessage` (plus optional ack callback).
+       Why: keep the chat history realtime without polling.
+       Cleanup: remove listener on unmount.
+    ----------------------------------------------------------------------- */
     socket.on('chat:message', onChatMessage);
     return () => {
       socket.off('chat:message', onChatMessage);
@@ -100,6 +93,13 @@ export default function GameChat({
   const helperText = error ?? '';
 
   useEffect(() => {
+    /* -----------------------------------------------------------------------
+       Stick-To-Bottom Behavior
+
+       While the user has not scrolled up, keep the scroll pane pinned to the
+       bottom whenever the active channel changes or new messages arrive.
+    ----------------------------------------------------------------------- */
+
     const pane = messagePaneRef.current;
     if (!pane) return;
     if (shouldStickToBottomRef.current) {
@@ -116,7 +116,7 @@ export default function GameChat({
       <button
         type="button"
         className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-40 inline-flex h-12 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-950/92 px-4 text-xs font-semibold text-slate-100 shadow-2xl backdrop-blur transition hover:bg-slate-900"
-        onClick={() => setIsOpen(true)}
+        onClick={() => setMobileOpen(true)}
       >
         Chat
       </button>
@@ -157,7 +157,7 @@ export default function GameChat({
             <button
               type="button"
               className="rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 hover:bg-slate-800/60"
-              onClick={() => setIsOpen(false)}
+              onClick={() => setMobileOpen(false)}
             >
               Close
             </button>
@@ -245,10 +245,7 @@ export default function GameChat({
                         : 'text-slate-500',
                     ].join(' ')}
                   >
-                    {new Date(message.sentAt).toLocaleTimeString([], {
-                      hour: 'numeric',
-                      minute: '2-digit',
-                    })}
+                    {formatChatTimestamp(message.sentAt)}
                   </p>
                 </div>
               </article>

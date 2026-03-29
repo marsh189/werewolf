@@ -9,7 +9,7 @@ import { getFactionForRole, isWerewolfRole } from './rolesService.js';
    transitions and action resolution.
 ============================================================================= */
 
-const END_GAME_PHASE_DURATION_MS = 10 * 1000;
+const END_GAME_PHASE_DURATION_MS = 7 * 1000;
 
 export const getAliveWerewolfIds = (lobby, aliveAtNightStart) =>
   Array.from(lobby.playerRoles.entries())

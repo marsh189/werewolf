@@ -16,15 +16,23 @@ export const parseLobbyNameInput = (data) => {
   const name = value.trim();
   if (!name) return null;
 
-  // Route params may arrive URL-encoded (e.g. "My%20Lobby"); normalize to
-  // the canonical lobby key while preserving raw names if decoding fails.
-  if (!name.includes('%')) return name;
-  try {
-    const decoded = decodeURIComponent(name).trim();
-    return decoded || null;
-  } catch {
-    return name;
+  // Route params may arrive URL-encoded (e.g. "My%20Lobby"). If a client ever
+  // double-encodes the lobby name (e.g. "My%2520Lobby"), decode twice so we
+  // still resolve the in-memory lobby key consistently.
+  let next = name;
+  for (let i = 0; i < 2; i++) {
+    if (!next.includes('%')) break;
+    try {
+      const decoded = decodeURIComponent(next);
+      if (decoded === next) break;
+      next = decoded;
+    } catch {
+      break;
+    }
   }
+
+  const decodedTrimmed = next.trim();
+  return decodedTrimmed || null;
 };
 
 export const parseTargetUserId = (data) => {

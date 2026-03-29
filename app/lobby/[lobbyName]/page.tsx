@@ -1,6 +1,5 @@
 'use client';
 
-import { socket } from '@/lib/socket';
 import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -9,53 +8,107 @@ import LobbyMembersList from '@/components/lobby/LobbyMembersList';
 import LobbySettings from '@/components/lobby/LobbySettings';
 import Navbar from '@/components/shared/Navbar';
 import { useSession } from 'next-auth/react';
-import { useLobbyRealtime } from '@/lib/useLobbyRealtime';
-import type { LobbySettingsUpdate } from '@/models/lobby';
-type SocketAck = { ok: boolean; error?: string };
+import { useLobbyRealtime } from '@/lib/hooks/useLobbyRealtime';
+import { usePresenceView } from '@/lib/hooks/usePresenceView';
+import { useNowTicker } from '@/lib/hooks/useNowTicker';
+import type { LobbyPhaseDurations, LobbySettingsUpdate } from '@/models/lobby';
+import {
+  leaveLobby,
+  startGame,
+  updateLobbySettings,
+} from '@/lib/actions/lobbySocketActions';
+import {
+  buildLobbySettingsPayload,
+  DEFAULT_PHASE_DURATIONS,
+  getStartingRemainingSeconds,
+} from '@/lib/selectors/lobbyUiSelectors';
+import { gamePath } from '@/lib/routes/routePaths';
+import { normalizeLobbyNameParam } from '@/lib/routes/lobbyName';
 
+/* =============================================================================
+   Lobby Page
+
+   Pre-game staging area for a single lobby. Responsibilities:
+   - render members + lobby status
+   - allow host to tweak settings + start the game
+   - show a local "starting in..." countdown (based on server `startingAt`)
+   - redirect into `/game` once the server marks the lobby started
+============================================================================= */
 export default function Lobby() {
   const router = useRouter();
   const { data: session, status: sessionStatus } = useSession();
   const { lobbyName } = useParams<{ lobbyName: string }>();
 
-  const { lobbyInfo, setLobbyInfo } = useLobbyRealtime(lobbyName);
-  const [nowMs, setNowMs] = useState<number | null>(null);
+  const lobbyNameParam = normalizeLobbyNameParam(
+    typeof lobbyName === 'string' ? lobbyName : undefined,
+  );
+
+  const { lobbyInfo, setLobbyInfo } = useLobbyRealtime(lobbyNameParam);
+
+  /* -----------------------------------------------------------------------
+     Lobby Name (Canonical)
+
+     Prefer the server-provided lobby name once we have a snapshot. This avoids
+     edge cases where the URL param is encoded/decoded differently (ex: spaces).
+  ----------------------------------------------------------------------- */
+  const lobbyNameCanonical =
+    lobbyInfo?.lobbyName ?? lobbyNameParam;
 
   useEffect(() => {
+    /* -----------------------------------------------------------------------
+       Lobby -> Game Redirect
+
+       The lobby view is only for pre-game setup. Once the server marks the
+       lobby as started, we immediately route into `/game` (unless the lobby is
+       already in the end/results phases).
+    ----------------------------------------------------------------------- */
+
     if (!lobbyInfo?.started) return;
-    const name =
-      typeof lobbyName === 'string' ? lobbyName : lobbyInfo.lobbyName;
+    const name = lobbyInfo?.lobbyName ?? lobbyNameCanonical;
     if (!name) return;
     if (lobbyInfo.gamePhase === 'endGame' || lobbyInfo.gamePhase === 'gameResults') {
       return;
     }
-    router.push(`/lobby/${encodeURIComponent(name)}/game`);
-  }, [lobbyInfo?.started, lobbyInfo?.lobbyName, lobbyInfo?.gamePhase, lobbyName, router]);
+    router.push(gamePath(name));
+  }, [
+    lobbyInfo?.started,
+    lobbyInfo?.lobbyName,
+    lobbyInfo?.gamePhase,
+    lobbyNameCanonical,
+    router,
+  ]);
 
-  useEffect(() => {
-    if (!lobbyInfo?.startingAt) return;
-    const kickoffId = setTimeout(() => {
-      setNowMs(Date.now());
-    }, 0);
-    const id = setInterval(() => {
-      setNowMs(Date.now());
-    }, 250);
-    return () => {
-      clearTimeout(kickoffId);
-      clearInterval(id);
-    };
-  }, [lobbyInfo?.startingAt]);
+  /* -----------------------------------------------------------------------
+     Countdown Ticker
 
-  useEffect(() => {
-    if (!lobbyName) return;
-    if (!socket.connected) socket.connect();
-    socket.emit('presence:setView', { lobbyName, view: 'lobby' });
-  }, [lobbyName]);
+     `startingAt` is a server timestamp. We keep a short interval clock so the
+     UI can render a smooth "Starting in..." countdown without server spam.
+  ----------------------------------------------------------------------- */
+  const nowMs = useNowTicker(!!lobbyInfo?.startingAt, 250);
 
-  const startingRemainingSeconds = lobbyInfo?.startingAt && nowMs !== null
-    ? Math.max(0, Math.ceil((lobbyInfo.startingAt - nowMs) / 1000))
-    : null;
+  /* -----------------------------------------------------------------------
+     Presence Tracking
 
+     Lets the server know the user is actively viewing the lobby screen.
+  ----------------------------------------------------------------------- */
+  usePresenceView(lobbyNameCanonical, 'lobby');
+
+  /* -----------------------------------------------------------------------
+     Derived Display Values
+  ----------------------------------------------------------------------- */
+
+  const startingRemainingSeconds = getStartingRemainingSeconds(
+    lobbyInfo?.startingAt,
+    nowMs,
+  );
+
+  const settingsDisplay = lobbyInfo ? buildLobbySettingsPayload(lobbyInfo) : null;
+
+  /* -----------------------------------------------------------------------
+     Host Permissions
+
+     Host-only controls (settings + start game).
+  ----------------------------------------------------------------------- */
   const isHost =
     lobbyInfo?.hostUserId && session?.user?.id
       ? lobbyInfo.hostUserId === session.user.id
@@ -63,79 +116,44 @@ export default function Lobby() {
 
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  const updateLobbySettings = (next: LobbySettingsUpdate) => {
-    if (!lobbyName) return;
-    socket
-      .timeout(5000)
-      .emit('lobby:updateSettings', { lobbyName, ...next }, (err: unknown, res: SocketAck | undefined) => {
-        if (err || !res?.ok) {
-          console.error(res?.error ?? 'Failed to update lobby settings');
-          return;
-        }
-        setLobbyInfo((prev) =>
-          prev ? { ...prev, ...next } : prev,
-        );
-      });
+  const applyLobbySettings = (next: LobbySettingsUpdate) => {
+    /* -----------------------------------------------------------------------
+       Host Settings Updates
+
+       `useLobbyRealtime` keeps us in sync with the server. We still optimistically
+       merge the successful update into local state so the UI reacts immediately.
+    ----------------------------------------------------------------------- */
+
+    if (!lobbyNameCanonical) return;
+
+    updateLobbySettings(lobbyNameCanonical, next, (err, res) => {
+      if (err || !res?.ok) {
+        console.error(res?.error ?? 'Failed to update lobby settings');
+        return;
+      }
+
+      setLobbyInfo((prev) => (prev ? { ...prev, ...next } : prev));
+    });
   };
 
   const handleWerewolfChange = (count: number) => {
     if (!lobbyInfo) return;
-    const minWerewolves = (lobbyInfo.specialRolesEnabled ?? false) ? 2 : 1;
-    updateLobbySettings({
-      werewolfCount: Math.max(minWerewolves, count),
-      specialRolesEnabled: lobbyInfo.specialRolesEnabled ?? false,
-      neutralRolesEnabled: lobbyInfo.neutralRolesEnabled ?? false,
-      phaseDurations: lobbyInfo.phaseDurations,
-    });
+    applyLobbySettings(buildLobbySettingsPayload(lobbyInfo, { werewolfCount: count }));
   };
 
   const handleSpecialRolesEnabledChange = (enabled: boolean) => {
     if (!lobbyInfo) return;
-    const minWerewolves = enabled ? 2 : 1;
-    const nextWerewolfCount = Math.max(
-      minWerewolves,
-      lobbyInfo.werewolfCount ?? minWerewolves,
-    );
-    updateLobbySettings({
-      werewolfCount: nextWerewolfCount,
-      specialRolesEnabled: enabled,
-      neutralRolesEnabled: enabled
-        ? (lobbyInfo.neutralRolesEnabled ?? false)
-        : false,
-      phaseDurations: lobbyInfo.phaseDurations,
-    });
+    applyLobbySettings(buildLobbySettingsPayload(lobbyInfo, { specialRolesEnabled: enabled }));
   };
 
   const handleNeutralRolesEnabledChange = (enabled: boolean) => {
     if (!lobbyInfo) return;
-    const minWerewolves = (lobbyInfo.specialRolesEnabled ?? false) ? 2 : 1;
-    updateLobbySettings({
-      werewolfCount: Math.max(
-        minWerewolves,
-        lobbyInfo.werewolfCount ?? minWerewolves,
-      ),
-      specialRolesEnabled: lobbyInfo.specialRolesEnabled ?? false,
-      neutralRolesEnabled: enabled,
-      phaseDurations: lobbyInfo.phaseDurations,
-    });
+    applyLobbySettings(buildLobbySettingsPayload(lobbyInfo, { neutralRolesEnabled: enabled }));
   };
 
-  const handlePhaseChange = (next: {
-    daySeconds: number;
-    nightSeconds: number;
-    voteSeconds: number;
-  }) => {
+  const handlePhaseChange = (next: LobbyPhaseDurations) => {
     if (!lobbyInfo) return;
-    const minWerewolves = (lobbyInfo.specialRolesEnabled ?? false) ? 2 : 1;
-    updateLobbySettings({
-      werewolfCount: Math.max(
-        minWerewolves,
-        lobbyInfo.werewolfCount ?? minWerewolves,
-      ),
-      specialRolesEnabled: lobbyInfo.specialRolesEnabled ?? false,
-      neutralRolesEnabled: lobbyInfo.neutralRolesEnabled ?? false,
-      phaseDurations: next,
-    });
+    applyLobbySettings(buildLobbySettingsPayload(lobbyInfo, { phaseDurations: next }));
   };
 
   return (
@@ -172,7 +190,7 @@ export default function Lobby() {
                   type="button"
                   className="game-button-secondary"
                   onClick={() => {
-                    socket.emit('leaveLobby', { lobbyName });
+                    leaveLobby(lobbyName);
                     router.push('/');
                   }}
                 >
@@ -203,19 +221,10 @@ export default function Lobby() {
                   <div className="mt-4 space-y-4">
                     <LobbySettings
                       isHost={isHost}
-                      werewolfCount={Math.max(
-                        (lobbyInfo?.specialRolesEnabled ?? false) ? 2 : 1,
-                        lobbyInfo?.werewolfCount ?? 1,
-                      )}
-                      specialRolesEnabled={lobbyInfo?.specialRolesEnabled ?? false}
-                      neutralRolesEnabled={lobbyInfo?.neutralRolesEnabled ?? false}
-                      phaseDurations={
-                        lobbyInfo?.phaseDurations ?? {
-                          daySeconds: 10,
-                          nightSeconds: 10,
-                          voteSeconds: 10,
-                        }
-                      }
+                      werewolfCount={settingsDisplay?.werewolfCount ?? 1}
+                      specialRolesEnabled={settingsDisplay?.specialRolesEnabled ?? false}
+                      neutralRolesEnabled={settingsDisplay?.neutralRolesEnabled ?? false}
+                      phaseDurations={settingsDisplay?.phaseDurations ?? DEFAULT_PHASE_DURATIONS}
                       onWerewolfChange={handleWerewolfChange}
                       onSpecialRolesEnabledChange={handleSpecialRolesEnabledChange}
                       onNeutralRolesEnabledChange={handleNeutralRolesEnabledChange}
@@ -234,7 +243,8 @@ export default function Lobby() {
                     type="button"
                     className="game-button-secondary"
                     onClick={() => {
-                      socket.emit('leaveLobby', { lobbyName });
+                      if (!lobbyNameCanonical) return;
+                      leaveLobby(lobbyNameCanonical);
                       router.push('/');
                     }}
                   >
@@ -250,13 +260,12 @@ export default function Lobby() {
                         lobbyInfo.startingAt !== null
                       }
                       onClick={() => {
-                        socket
-                          .timeout(5000)
-                          .emit('startGame', { lobbyName }, (err: unknown, res: SocketAck | undefined) => {
-                            if (err || !res?.ok) {
-                              console.error(res?.error ?? 'Failed to start game');
-                            }
-                          });
+                        if (!lobbyNameCanonical) return;
+                        startGame(lobbyNameCanonical, (err, res) => {
+                          if (err || !res?.ok) {
+                            console.error(res?.error ?? 'Failed to start game');
+                          }
+                        });
                       }}
                     >
                       {lobbyInfo?.startingAt !== null
@@ -277,19 +286,10 @@ export default function Lobby() {
                 <div className="mt-4">
                   <LobbySettings
                     isHost={isHost}
-                    werewolfCount={Math.max(
-                      (lobbyInfo?.specialRolesEnabled ?? false) ? 2 : 1,
-                      lobbyInfo?.werewolfCount ?? 1,
-                    )}
-                    specialRolesEnabled={lobbyInfo?.specialRolesEnabled ?? false}
-                    neutralRolesEnabled={lobbyInfo?.neutralRolesEnabled ?? false}
-                    phaseDurations={
-                      lobbyInfo?.phaseDurations ?? {
-                        daySeconds: 10,
-                        nightSeconds: 10,
-                        voteSeconds: 10,
-                      }
-                    }
+                    werewolfCount={settingsDisplay?.werewolfCount ?? 1}
+                    specialRolesEnabled={settingsDisplay?.specialRolesEnabled ?? false}
+                    neutralRolesEnabled={settingsDisplay?.neutralRolesEnabled ?? false}
+                    phaseDurations={settingsDisplay?.phaseDurations ?? DEFAULT_PHASE_DURATIONS}
                     onWerewolfChange={handleWerewolfChange}
                     onSpecialRolesEnabledChange={handleSpecialRolesEnabledChange}
                     onNeutralRolesEnabledChange={handleNeutralRolesEnabledChange}
@@ -313,13 +313,12 @@ export default function Lobby() {
                         lobbyInfo.startingAt !== null
                       }
                       onClick={() => {
-                        socket
-                          .timeout(5000)
-                          .emit('startGame', { lobbyName }, (err: unknown, res: SocketAck | undefined) => {
-                            if (err || !res?.ok) {
-                              console.error(res?.error ?? 'Failed to start game');
-                            }
-                          });
+                        if (!lobbyNameCanonical) return;
+                        startGame(lobbyNameCanonical, (err, res) => {
+                          if (err || !res?.ok) {
+                            console.error(res?.error ?? 'Failed to start game');
+                          }
+                        });
                       }}
                     >
                       {lobbyInfo?.startingAt !== null

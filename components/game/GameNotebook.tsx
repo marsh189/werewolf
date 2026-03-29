@@ -1,6 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useMediaQuery } from '@/lib/hooks/useMediaQuery';
+import { DESKTOP_MEDIA_QUERY } from '@/lib/constants/uiConstants';
+import { getNotebookStorageKey } from '@/lib/constants/storageKeys';
 
 type GameNotebookProps = {
   lobbyName?: string;
@@ -15,25 +18,13 @@ export default function GameNotebook({
   canWrite = true,
   onNotesChange,
 }: GameNotebookProps) {
-  const [isDesktop, setIsDesktop] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia('(min-width: 640px)').matches;
-  });
+  const isDesktop = useMediaQuery(DESKTOP_MEDIA_QUERY);
   const [isOpen, setIsOpen] = useState<boolean>(false);
   const [notes, setNotes] = useState<string>('');
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const media = window.matchMedia('(min-width: 640px)');
-    const update = () => setIsDesktop(media.matches);
-    update();
-    media.addEventListener('change', update);
-    return () => media.removeEventListener('change', update);
-  }, []);
-
   const storageKey = useMemo(() => {
     if (!lobbyName || !userId) return null;
-    return `werewolf:notebook:${lobbyName}:${userId}`;
+    return getNotebookStorageKey(lobbyName, userId);
   }, [lobbyName, userId]);
 
   useEffect(() => {

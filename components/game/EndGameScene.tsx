@@ -1,14 +1,11 @@
 import type { ReactNode } from 'react';
-import PhaseTimer from '@/components/game/PhaseTimer';
 
 type EndGameSceneProps = {
-  phaseEndsAt: number | null;
   didWin: boolean | null;
   endGameButton: ReactNode;
 };
 
 export default function EndGameScene({
-  phaseEndsAt,
   didWin,
   endGameButton,
 }: EndGameSceneProps) {
@@ -33,10 +30,9 @@ export default function EndGameScene({
           {title}
         </h1>
         <p className="reveal-subtitle">{subtitle}</p>
-        <div className="pt-2 flex flex-col items-center gap-4">
-          <PhaseTimer phaseEndsAt={phaseEndsAt} />
-          {endGameButton ? <div className="max-w-xs mx-auto">{endGameButton}</div> : null}
-        </div>
+        {endGameButton ? (
+          <div className="pt-4 max-w-xs mx-auto">{endGameButton}</div>
+        ) : null}
       </div>
     </div>
   );

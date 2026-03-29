@@ -1,16 +1,17 @@
 import { useRouter } from 'next/navigation';
-import { LobbyGuard } from './LobbyGuard';
 import LobbyCard from './LobbyCard';
 import CreateLobbyModal from './CreateLobbyModal';
 import RefreshIcon from '@/components/shared/RefreshIcon';
 import { useEffect, useMemo, useState } from 'react';
 import { socket } from '@/lib/socket';
-import type {
-  LobbyListItem,
-  ListAck,
-  JoinAck,
-  CreateAck,
-} from '@/models/lobby';
+import { connectSocketIfNeeded } from '@/lib/socket/utils';
+import type { LobbyListItem } from '@/models/lobby';
+import {
+  createLobby as createLobbyAction,
+  joinLobby,
+  requestLobbiesList as requestLobbiesListAction,
+} from '@/lib/actions/lobbySocketActions';
+import { lobbyPath } from '@/lib/routes/routePaths';
 
 export default function LobbySelect() {
   const router = useRouter();
@@ -41,21 +42,19 @@ export default function LobbySelect() {
   const requestLobbiesList = () => {
     setErrorMessage('');
 
-    socket
-      .timeout(5000)
-      .emit('lobbiesList', {}, (err: unknown, res: ListAck<LobbyListItem>) => {
-        if (err) {
-          setErrorMessage('Server did not respond. Try refresh again.');
-          return;
-        }
+    requestLobbiesListAction((err, res) => {
+      if (err) {
+        setErrorMessage('Server did not respond. Try refresh again.');
+        return;
+      }
 
-        if (!res?.ok) {
-          setErrorMessage(res?.error ?? 'Failed to fetch lobbies.');
-          return;
-        }
+      if (!res?.ok) {
+        setErrorMessage(res?.error ?? 'Failed to fetch lobbies.');
+        return;
+      }
 
-        setLobbies(res.lobbies ?? []);
-      });
+      setLobbies(res.lobbies ?? []);
+    });
   };
 
   const joinByName = (name: string) => {
@@ -64,24 +63,18 @@ export default function LobbySelect() {
 
     setErrorMessage('');
 
-    socket
-      .timeout(5000)
-      .emit(
-        'joinLobby',
-        { lobbyName: trimmed },
-        (err: unknown, response: JoinAck) => {
-          if (err) {
-            setErrorMessage('Join request timed out.');
-            return;
-          }
+    joinLobby(trimmed, (err, response) => {
+      if (err) {
+        setErrorMessage('Join request timed out.');
+        return;
+      }
 
-          if (!response?.ok) {
-            setErrorMessage(response?.error ?? 'Could not join lobby.');
-            return;
-          }
-          router.push(`/lobby/${encodeURIComponent(response.lobbyName)}`);
-        },
-      );
+      if (!response?.ok) {
+        setErrorMessage(response?.error ?? 'Could not join lobby.');
+        return;
+      }
+      router.push(lobbyPath(response.lobbyName));
+    });
   };
 
   const createLobby = (name: string) => {
@@ -91,37 +84,44 @@ export default function LobbySelect() {
     setErrorMessage('');
     setCreatingLobby(true);
 
-    socket
-      .timeout(5000)
-      .emit(
-        'createLobby',
-        { lobbyName: trimmed },
-        (err: unknown, response: CreateAck) => {
-          setCreatingLobby(false);
-          if (err) {
-            setErrorMessage('Create lobby request timed out.');
-            return;
-          }
+    createLobbyAction(trimmed, (err, response) => {
+      setCreatingLobby(false);
+      if (err) {
+        setErrorMessage('Create lobby request timed out.');
+        return;
+      }
 
-          if (!response?.ok) {
-            setErrorMessage(response?.error ?? 'Could not create lobby.');
-            return;
-          }
+      if (!response?.ok) {
+        setErrorMessage(response?.error ?? 'Could not create lobby.');
+        return;
+      }
 
-          setIsCreateOpen(false);
-          setNewLobbyName('');
-          router.push(`/lobby/${encodeURIComponent(response.lobbyName)}`);
-        },
-      );
+      setIsCreateOpen(false);
+      setNewLobbyName('');
+      router.push(lobbyPath(response.lobbyName));
+    });
   };
 
   useEffect(() => {
-    if (!socket.connected) socket.connect();
+    /* -------------------------------------------------------------------------
+       Lobby List Realtime
+
+       We fetch once on mount and then subscribe to server push updates.
+    ------------------------------------------------------------------------- */
+
+    connectSocketIfNeeded();
 
     const onOpenLobbies = (list: LobbyListItem[]) => {
       setLobbies(list ?? []);
     };
 
+    /* -----------------------------------------------------------------------
+       Server Push Subscription: `lobbiesList`
+
+       Payload: `LobbyListItem[]` list of current open lobbies.
+       Why: the lobby browser updates live as lobbies are created/started.
+       Cleanup: remove listener on unmount.
+    ----------------------------------------------------------------------- */
     socket.on('lobbiesList', onOpenLobbies);
 
     // initial load
@@ -136,9 +136,8 @@ export default function LobbySelect() {
   }, []);
 
   return (
-    <LobbyGuard>
-      <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        <div className="flex flex-col gap-6">
+    <div className="w-full max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
+      <div className="flex flex-col gap-6">
           <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
             <div>
               <h1 className="game-title text-left mt-2">Lobbies</h1>
@@ -281,7 +280,6 @@ export default function LobbySelect() {
               </div>
             </div>
           </div>
-        </div>
       </div>
       <CreateLobbyModal
         isOpen={isCreateOpen}
@@ -291,6 +289,6 @@ export default function LobbySelect() {
         onCreate={() => createLobby(newLobbyName)}
         onClose={() => setIsCreateOpen(false)}
       />
-    </LobbyGuard>
+    </div>
   );
 }

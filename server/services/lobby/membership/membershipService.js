@@ -50,7 +50,35 @@ export const leaveLobby = (io, socket, lobbyName) => {
 
 export const joinLobby = (io, socket, lobby) => {
   const user = socket.data.user;
-  lobby.members.set(user.id, createMember(user, socket.id));
+
+  /* -------------------------------------------------------------------------
+     Idempotent Join
+
+     In dev, React Strict Mode and reconnect logic can cause the client to emit
+     "initiateLobby" more than once during navigation. That handler re-uses this
+     helper, which previously produced noisy duplicate "joined lobby" logs.
+
+     Joining is safe to call repeatedly, but we treat it as a no-op when:
+     - the user is already a member
+     - the socket is already in the lobby room
+     - the member's socketId already matches
+  ------------------------------------------------------------------------- */
+
+  const existingMember = lobby.members.get(user.id) ?? null;
+  const alreadyMember = !!existingMember;
+  const alreadyInRoom = socket.rooms?.has(lobby.name) === true;
+  const sameSocket = existingMember?.socketId === socket.id;
+
+  if (alreadyMember) {
+    // Preserve `joinedAt` across reconnects; update socketId/name as needed.
+    lobby.members.set(user.id, {
+      ...existingMember,
+      socketId: socket.id,
+      name: user.name ?? existingMember.name ?? 'Player',
+    });
+  } else {
+    lobby.members.set(user.id, createMember(user, socket.id));
+  }
 
   // If the user reconnects before cleanup triggers, cancel the cleanup timer.
   if (lobby.disconnectCleanupTimers?.has(user.id)) {
@@ -65,12 +93,20 @@ export const joinLobby = (io, socket, lobby) => {
   setLobby(lobby.name, lobby);
   setUserLobby(user.id, lobby.name);
 
-  socket.join(lobby.name);
+  if (!alreadyInRoom) {
+    socket.join(lobby.name);
+  }
 
-  console.log(`connected ${socket.id} (${user?.email}) joined lobby ${lobby.name}`);
+  const didChangeJoinState = !alreadyMember || !alreadyInRoom || !sameSocket;
 
-  emitLobbyUpdate(io, lobby);
-  emitLobbiesList(io);
+  if (didChangeJoinState) {
+    console.log(
+      `connected ${socket.id} (${user?.email}) joined lobby ${lobby.name}`,
+    );
+
+    emitLobbyUpdate(io, lobby);
+    emitLobbiesList(io);
+  }
 };
 
 export const removeUserFromLobby = (io, lobbyName, userId) => {

@@ -2,67 +2,8 @@ import { getRoleDisplayName, ROLES } from '@/models/roles';
 import type { Role } from '@/models/roles';
 import type { LobbySettingsProps } from '@/models/lobby';
 import DurationStepper from './DurationStepper';
-import { useEffect, useRef, useState } from 'react';
-
-function RoleInfoPopover({
-  role,
-  align = 'right',
-}: {
-  role: Role;
-  align?: 'left' | 'right';
-}) {
-  const [pinnedOpen, setPinnedOpen] = useState(false);
-  const open = pinnedOpen;
-  const roleDisplayName = getRoleDisplayName(role);
-  const containerRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const onPointerDown = (event: PointerEvent) => {
-      const container = containerRef.current;
-      if (!container) return;
-      if (event.target instanceof Node && container.contains(event.target)) return;
-      setPinnedOpen(false);
-    };
-
-    document.addEventListener('pointerdown', onPointerDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', onPointerDown, true);
-    };
-  }, [open]);
-
-  return (
-    <div ref={containerRef} className="relative inline-flex items-center z-40">
-      <button
-        type="button"
-        aria-label={`${roleDisplayName} role info`}
-        aria-expanded={open}
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-slate-500/60 text-[11px] font-bold text-slate-200 hover:bg-slate-700/60 focus:outline-none focus:ring-2 focus:ring-sky-400"
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') setPinnedOpen(false);
-        }}
-        onClick={() => setPinnedOpen((prev) => !prev)}
-      >
-        i
-      </button>
-      <div
-        className={[
-          'pointer-events-auto absolute top-full z-[999] mt-2 w-64 max-w-[calc(100vw-1rem)] rounded-md border border-slate-600 bg-slate-900/95 p-2 text-left text-xs text-slate-200 shadow-lg transition-opacity',
-          align === 'left'
-            ? 'left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-0'
-            : 'right-0',
-          open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none',
-        ].join(' ')}
-      >
-        <p className="leading-tight">{ROLES[role].ability}</p>
-        <p className="mt-1 leading-tight text-amber-300">
-          Win: {ROLES[role].winCondition}
-        </p>
-      </div>
-    </div>
-  );
-}
+import RoleInfoPopover from './RoleInfoPopover';
+import { formatMinutesSeconds } from '@/lib/formatters/timeFormatters';
 
 export default function LobbySettings({
   isHost,
@@ -75,13 +16,6 @@ export default function LobbySettings({
   onNeutralRolesEnabledChange,
   onPhaseChange,
 }: LobbySettingsProps) {
-  const formatSeconds = (totalSeconds: number) => {
-    const clamped = Math.max(0, Math.floor(totalSeconds));
-    const minutes = Math.floor(clamped / 60);
-    const seconds = clamped % 60;
-    return `${minutes}:${String(seconds).padStart(2, '0')}`;
-  };
-
   const minWerewolves = specialRolesEnabled ? 2 : 1;
 
   const possibleRoles = (Object.keys(ROLES) as Role[]).filter(
@@ -89,10 +23,6 @@ export default function LobbySettings({
       role !== 'Villager' &&
       role !== 'Werewolf' &&
       (neutralRolesEnabled || ROLES[role].faction !== 'Neutral'),
-  );
-
-  const renderRoleInfo = (role: Role, align: 'left' | 'right') => (
-    <RoleInfoPopover role={role} align={align} />
   );
 
   return (
@@ -111,7 +41,7 @@ export default function LobbySettings({
                 daySeconds: nextSeconds,
               })
             }
-            formatSeconds={formatSeconds}
+            formatSeconds={formatMinutesSeconds}
           />
           <DurationStepper
             label="Night"
@@ -124,7 +54,7 @@ export default function LobbySettings({
                 nightSeconds: nextSeconds,
               })
             }
-            formatSeconds={formatSeconds}
+            formatSeconds={formatMinutesSeconds}
           />
           <DurationStepper
             label="Voting"
@@ -137,7 +67,7 @@ export default function LobbySettings({
                 voteSeconds: nextSeconds,
               })
             }
-            formatSeconds={formatSeconds}
+            formatSeconds={formatMinutesSeconds}
           />
         </div>
       </div>
@@ -246,32 +176,32 @@ export default function LobbySettings({
               Possible Roles
             </p>
             <div className="grid grid-cols-2 gap-2 overflow-visible">
-              {possibleRoles.map((role, index) => (
-                (() => {
-                  const roleDisplayName = getRoleDisplayName(role);
-                  const align = index % 2 === 0 ? 'left' : 'right';
-                  return (
-                    <div
-                      key={role}
-                      className={[
-                        'game-box py-2 relative overflow-visible hover:z-50 focus-within:z-50',
-                        ROLES[role].faction === 'Neutral'
-                          ? 'bg-gradient-to-r from-slate-500/20 to-slate-700/20 border-slate-500/40 text-slate-200'
-                          : ROLES[role].faction === 'Enemy'
-                            ? 'game-box-werewolf'
+              {possibleRoles.map((role, index) => {
+                const roleDisplayName = getRoleDisplayName(role);
+                const align = index % 2 === 0 ? 'left' : 'right';
+                const faction = ROLES[role].faction;
+
+                return (
+                  <div
+                    key={role}
+                    className={[
+                      'game-box py-2 relative overflow-visible hover:z-50 focus-within:z-50',
+                      faction === 'Neutral'
+                        ? 'bg-gradient-to-r from-slate-500/20 to-slate-700/20 border-slate-500/40 text-slate-200'
+                        : faction === 'Enemy'
+                          ? 'game-box-werewolf'
                           : 'game-box-role',
-                      ].join(' ')}
-                    >
-                      <div className="absolute right-2 top-1/2 -translate-y-1/2 z-30">
-                        {renderRoleInfo(role, align)}
-                      </div>
-                      <div className="pr-8">
-                        <span>{roleDisplayName}</span>
-                      </div>
+                    ].join(' ')}
+                  >
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 z-30">
+                      <RoleInfoPopover role={role} align={align} />
                     </div>
-                  );
-                })()
-              ))}
+                    <div className="pr-8">
+                      <span>{roleDisplayName}</span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
         ) : null}

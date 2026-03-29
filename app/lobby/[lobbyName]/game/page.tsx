@@ -1,222 +1,157 @@
 ﻿'use client';
 
-import GameNotebook from '@/components/game/GameNotebook';
 import EliminationResultsCard from '@/components/game/EliminationResultsCard';
 import EndGameScene from '@/components/game/EndGameScene';
-import GameChat from '@/components/game/GameChat';
+import GameFloatingPanels from '@/components/game/GameFloatingPanels';
+import GameOverlays from '@/components/game/GameOverlays';
+import GameStartingScene from '@/components/game/GameStartingScene';
 import MemberActionRow from '@/components/game/MemberActionRow';
 import NightResultsScene from '@/components/game/NightResultsScene';
-import NotebookModal from '@/components/game/NotebookModal';
 import PhaseTimer from '@/components/game/PhaseTimer';
 import PlayerList from '@/components/game/PlayerList';
-import RoleInfoPopover from '@/components/game/RoleInfoPopover';
+import PlayerRoleCard from '@/components/game/PlayerRoleCard';
 import RoleRevealScene from '@/components/game/RoleRevealScene';
 import {
   endGame,
-  initGame,
   toggleTrapperAlert,
   updateNotebook,
-} from '@/lib/gameSocketActions';
-import { useGamePhaseAnimation } from '@/lib/useGamePhaseAnimation';
-import { useLobbyRealtime } from '@/lib/useLobbyRealtime';
-import { socket } from '@/lib/socket';
+} from '@/lib/actions/gameSocketActions';
+import { useGamePhaseAnimation } from '@/lib/hooks/useGamePhaseAnimation';
+import { useLobbyGameState } from '@/lib/hooks/useLobbyGameState';
+import { useLobbyRealtime } from '@/lib/hooks/useLobbyRealtime';
+import { usePresenceView } from '@/lib/hooks/usePresenceView';
+import {
+  buildChatRefreshKey,
+  buildNightResultsSequenceKey,
+  sortMembersAliveFirst,
+} from '@/lib/selectors/gameUiSelectors';
+import { getStartingRemainingSeconds } from '@/lib/selectors/lobbyUiSelectors';
+import { normalizeLobbyNameParam } from '@/lib/routes/lobbyName';
 import { getRoleDisplayName, ROLES } from '@/models/roles';
 import type { NightInstructionContext, Role } from '@/models/roles';
-import type {
-  GameInitResponse,
-  GamePhase,
-  NotebookView,
-  SocketAck,
-} from '@/models/game';
-import type { EliminationResult } from '@/models/lobby';
+import type { SocketAck } from '@/models/game';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
-import { useCallback, useEffect, useRef, useState } from 'react';
 
-type GameSnapshot = NonNullable<GameInitResponse['game']>;
+/* =============================================================================
+   Game Page
 
-const getSelectedNightTargetFromSnapshot = (game: GameSnapshot) => {
-  switch (game.role) {
-    case 'AlphaWolf':
-    case 'Werewolf':
-    case 'Hunter':
-      return game.nightKillTargetUserId ?? null;
-    case 'Escort':
-      return game.escortVisitTargetUserId ?? null;
-    case 'Bodyguard':
-      return game.bodyguardGuardTargetUserId ?? null;
-    case 'Doctor':
-      return game.doctorProtectTargetUserId ?? null;
-    case 'Tracker':
-      return game.trackerWatchTargetUserId ?? null;
-    case 'Lookout':
-      return game.lookoutWatchTargetUserId ?? null;
-    case 'Investigator':
-      return game.investigatorVisitTargetUserId ?? null;
-    case 'Framer':
-      return game.framerTargetUserId ?? null;
-    case 'Prowler':
-      return game.prowlerTargetUserId ?? null;
-    case 'Snatcher':
-      return game.snatcherTargetUserId ?? null;
-    case 'Cursed':
-      return game.cursedTargetUserId ?? null;
-    case 'Mimic':
-      return game.mimicTargetUserId ?? null;
-    default:
-      return null;
-  }
-};
-
+   Main gameplay screen for a lobby. Responsibilities:
+   - render the current phase UI (day/night/vote/results/etc.)
+   - wire realtime lobby snapshots + game snapshots into one UI state
+   - drive "cinematic" animations using authoritative server timers
+   - expose per-role actions via socket events (server validates everything)
+============================================================================= */
 export default function LobbyGamePage() {
   const router = useRouter();
   const { data: session } = useSession();
   const { lobbyName } = useParams<{ lobbyName: string }>();
-  const lobbyNameString = typeof lobbyName === 'string' ? lobbyName : undefined;
-  const { lobbyInfo } = useLobbyRealtime(lobbyName);
-  const [nowMs, setNowMs] = useState<number | null>(null);
-  const navigatedToResultsRef = useRef(false);
 
-  useEffect(() => {
-    if (!lobbyName || typeof lobbyName !== 'string') return;
-    if (!socket.connected) socket.connect();
-    // Server-side presence and view tracking.
-    socket.emit('presence:setView', { lobbyName, view: 'game' });
-  }, [lobbyName]);
-
-  const [phase, setPhase] = useState<GamePhase>('lobby');
-  const [dayNumber, setDayNumber] = useState<number | null>(null);
-  const [nightNumber, setNightNumber] = useState<number | null>(null);
-  const [phaseEndsAt, setPhaseEndsAt] = useState<number | null>(null);
-  const [currentNightDeathReveal, setCurrentNightDeathReveal] = useState<{
-    userId: string;
-    name: string;
-    notebook: string;
-  } | null>(null);
-  const [currentEliminationResult, setCurrentEliminationResult] =
-    useState<EliminationResult | null>(null);
-  const [viewingNotebook, setViewingNotebook] = useState<NotebookView | null>(
-    null,
+  const lobbyNameParam = normalizeLobbyNameParam(
+    typeof lobbyName === 'string' ? lobbyName : undefined,
   );
-  const [role, setRole] = useState<string | null>(null);
-  const [gameStarted, setGameStarted] = useState<boolean>(true);
-  const [gameHostUserId, setGameHostUserId] = useState<string | null>(null);
-  const [canWriteNotebook, setCanWriteNotebook] = useState<boolean>(true);
-  const [werewolfUserIds, setWerewolfUserIds] = useState<string[]>([]);
-  const [hunterShotsRemaining, setHunterShotsRemaining] = useState<number>(0);
-  const [trapperAlertsRemaining, setTrapperAlertsRemaining] =
-    useState<number>(0);
-  const [trapperAlertActive, setTrapperAlertActive] = useState<boolean>(false);
-  const [doctorSelfProtectUsed, setDoctorSelfProtectUsed] =
-    useState<boolean>(false);
-  const [executionerTargetName, setExecutionerTargetName] = useState<
-    string | null
-  >(null);
-  const [executionerTargetUserId, setExecutionerTargetUserId] = useState<
-    string | null
-  >(null);
-  const [selectedNightActionTargetId, setSelectedNightActionTargetId] =
-    useState<string | null>(null);
-  const [selectedVoteTargetId, setSelectedVoteTargetId] = useState<
-    string | null
-  >(null);
 
-  // Apply a server-provided snapshot (via `game:init`) into local UI state.
-  // This is used on first load and again when lobby realtime state changes to keep the UI resilient to refreshes.
-  const applyCommonSnapshot = useCallback((game: GameSnapshot) => {
-    setRole(game.role);
-    setCanWriteNotebook(game.canWriteNotebook);
-    setWerewolfUserIds(game.werewolfUserIds ?? []);
-    setHunterShotsRemaining(game.hunterShotsRemaining ?? 0);
-    setTrapperAlertsRemaining(game.trapperAlertsRemaining ?? 0);
-    setTrapperAlertActive(game.trapperAlertActive ?? false);
-    setDoctorSelfProtectUsed(game.doctorSelfProtectUsed ?? false);
-    setSelectedNightActionTargetId(getSelectedNightTargetFromSnapshot(game));
-    setExecutionerTargetName(game.executionerTargetName ?? null);
-    setExecutionerTargetUserId(game.executionerTargetUserId ?? null);
-    setGameHostUserId(game.hostUserId);
-  }, []);
+  // Subscribe using the param-derived name so the hook doesn't thrash when the
+  // server later returns the canonical lobby name.
+  const { lobbyInfo } = useLobbyRealtime(lobbyNameParam);
 
-  const applyFullSnapshot = useCallback((game: GameSnapshot) => {
-    setGameStarted(game.started);
-    setPhase(game.phase);
-    setDayNumber(game.dayNumber);
-    setNightNumber(game.nightNumber);
-    setPhaseEndsAt(game.phaseEndsAt);
-    setCurrentNightDeathReveal(game.currentNightDeathReveal ?? null);
-    setCurrentEliminationResult(game.currentEliminationResult ?? null);
-    applyCommonSnapshot(game);
-  }, [applyCommonSnapshot]);
+  // Canonical key to use for *emits* (prevents double-encoded lobby keys).
+  const lobbyNameKey = lobbyInfo?.lobbyName ?? lobbyNameParam;
 
-  useEffect(() => {
-    if (!lobbyNameString) return;
+  /* -----------------------------------------------------------------------
+     Presence Tracking
 
-    initGame(lobbyNameString, (response: GameInitResponse) => {
-      if (!response?.ok || !response.game) {
-        console.error(response?.error ?? 'Failed to initialize game');
-        return;
-      }
-      applyFullSnapshot(response.game);
-    });
-  }, [applyFullSnapshot, lobbyNameString]);
+     Lets the server know this user is actively viewing the game screen.
+  ----------------------------------------------------------------------- */
+  usePresenceView(lobbyNameKey, 'game');
 
-  useEffect(() => {
-    if (!lobbyNameString || !lobbyInfo) return;
-    initGame(lobbyNameString, (response: GameInitResponse) => {
-      if (!response?.ok || !response.game) return;
-      applyCommonSnapshot(response.game);
-    });
-  }, [applyCommonSnapshot, lobbyNameString, lobbyInfo]);
+  /* -----------------------------------------------------------------------
+     Orchestrated Game UI State
 
-  useEffect(() => {
-    if (!lobbyNameString) return;
-    if (lobbyInfo?.gamePhase !== 'gameResults') return;
-    if (navigatedToResultsRef.current) return;
-    navigatedToResultsRef.current = true;
+     `useLobbyGameState` owns the "fetch + reconcile + redirect" logic so this
+     page can focus on rendering.
+  ----------------------------------------------------------------------- */
+  const {
+    nowMs,
+    started,
+    effectiveDisplayPhase,
+    phase,
+    dayNumber,
+    nightNumber,
+    phaseEndsAt,
+    currentNightDeathReveal,
+    currentEliminationResult,
+    role,
+    gameHostUserId,
+    canWriteNotebook,
+    werewolfUserIds,
+    hunterShotsRemaining,
+    trapperAlertsRemaining,
+    trapperAlertActive,
+    doctorSelfProtectUsed,
+    executionerTargetName,
+    executionerTargetUserId,
+    viewingNotebook,
+    setViewingNotebook,
+    selectedNightActionTargetId,
+    setSelectedNightActionTargetId,
+    selectedVoteTargetId,
+    setSelectedVoteTargetId,
+  } = useLobbyGameState({
+    lobbyName: lobbyNameKey,
+    lobbyInfo,
+    navigation: router,
+  });
 
-    // Give the results overlay time to fade out before route transition.
-    const id = setTimeout(() => {
-      router.replace(`/lobby/${encodeURIComponent(lobbyNameString)}/results`);
-    }, 900);
-    return () => clearTimeout(id);
-  }, [lobbyInfo?.gamePhase, lobbyNameString, router]);
+  /* -----------------------------------------------------------------------
+     Authoritative Phase Snapshot
 
-  const started = lobbyInfo?.started ?? gameStarted;
+     Lobby realtime (`useLobbyRealtime`) is the source of truth for phase and
+     membership; `useLobbyGameState` provides fallback state for resilience.
+  ----------------------------------------------------------------------- */
   const currentPhase = lobbyInfo?.gamePhase ?? phase;
-  // "nightActionResults" is presented as night, but player actions are still gated by `currentPhase === 'night'`.
-  const effectiveDisplayPhase =
-    currentPhase === 'nightActionResults' ? 'night' : currentPhase;
   const currentDayNumber = lobbyInfo?.dayNumber ?? dayNumber;
   const currentNightNumber = lobbyInfo?.nightNumber ?? nightNumber;
   const currentPhaseEndsAt = lobbyInfo?.phaseEndsAt ?? phaseEndsAt;
-  const revealDeath =
-    lobbyInfo?.currentNightDeathReveal ?? currentNightDeathReveal;
+  const revealDeath = lobbyInfo?.currentNightDeathReveal ?? currentNightDeathReveal;
   const revealDeathUserId = revealDeath?.userId ?? null;
-  // Used to restart the animated night-results sequence when the revealed death changes.
-  const nightResultsSequenceKey = revealDeathUserId
-    ? `death-${revealDeathUserId}`
-    : `none-${currentNightNumber ?? 0}`;
-  const eliminationResult =
-    lobbyInfo?.currentEliminationResult ?? currentEliminationResult;
+
+  /* -----------------------------------------------------------------------
+     Night Results Sequence Key
+
+     Used to restart the animated night-results sequence when the revealed death
+     changes (without restarting on duplicate snapshots).
+  ----------------------------------------------------------------------- */
+  const nightResultsSequenceKey = buildNightResultsSequenceKey(
+    revealDeathUserId,
+    currentNightNumber,
+  );
+  const eliminationResult = lobbyInfo?.currentEliminationResult ?? currentEliminationResult;
   const hostUserId = lobbyInfo?.hostUserId ?? gameHostUserId;
+
+  /* -----------------------------------------------------------------------
+     Local Player + Member Ordering
+
+     We keep alive players at the top for readability, while preserving the
+     original server ordering within each alive/dead group.
+  ----------------------------------------------------------------------- */
   const currentUserId = session?.user?.id;
   const selfMember = (lobbyInfo?.members ?? []).find(
     (member) => member.userId === currentUserId,
   );
-  const sortedMembers = (lobbyInfo?.members ?? [])
-    .map((member, index) => ({ member, index }))
-    .sort((a, b) => {
-      if (a.member.alive === b.member.alive) return a.index - b.index;
-      return a.member.alive ? -1 : 1;
-    })
-    .map(({ member }) => member);
+  const sortedMembers = sortMembersAliveFirst(lobbyInfo?.members ?? []);
   const selfAlive = selfMember?.alive ?? true;
-  const startingRemainingSeconds =
-    lobbyInfo?.startingAt && nowMs !== null
-      ? Math.max(0, Math.ceil((lobbyInfo.startingAt - nowMs) / 1000))
-      : null;
+  const startingRemainingSeconds = getStartingRemainingSeconds(
+    lobbyInfo?.startingAt,
+    nowMs,
+  );
 
-  // Drives cinematic fades + role/night reveal animations based on the authoritative phase timers.
+  /* -----------------------------------------------------------------------
+     Phase Animations
+
+     Drives cinematic fades + role/night reveal animations based on the
+     authoritative phase timers (`phaseEndsAt`) sent by the server.
+  ----------------------------------------------------------------------- */
   const { revealState, nightResultRevealState, phaseOverlayState } =
     useGamePhaseAnimation({
       currentPhase,
@@ -273,6 +208,64 @@ export default function LobbyGamePage() {
           : effectiveDisplayPhase === 'night'
             ? nightInstruction
             : null;
+  const instructionNode = (() => {
+    if (!phaseSubInstruction) return null;
+
+    // For roles that have limited resources (ex: Hunter shots, Trapper alerts, Doctor self-protect),
+    // highlight the resource portion of the instruction text to match the info popover color.
+    if (effectiveDisplayPhase !== 'night') {
+      return phaseSubInstruction;
+    }
+
+    if (typeof phaseSubInstruction !== 'string') return phaseSubInstruction;
+
+    const highlightFromMarkerToEnd = (marker: string) => {
+      const idx = phaseSubInstruction.indexOf(marker);
+      if (idx === -1) return null;
+      const before = phaseSubInstruction.slice(0, idx).trimEnd();
+      const after = phaseSubInstruction.slice(idx);
+      return (
+        <>
+          <span>{before} </span>
+          <span className="text-sky-300 font-semibold">{after}</span>
+        </>
+      );
+    };
+
+    const highlightExactSentence = (sentence: string) => {
+      const idx = phaseSubInstruction.indexOf(sentence);
+      if (idx === -1) return null;
+      const before = phaseSubInstruction.slice(0, idx).trimEnd();
+      const after = phaseSubInstruction.slice(idx + sentence.length).trimStart();
+      return (
+        <>
+          {before ? <span>{before} </span> : null}
+          <span className="text-sky-300 font-semibold">{sentence}</span>
+          {after ? <span> {after}</span> : null}
+        </>
+      );
+    };
+
+    if (roleName === 'Hunter') {
+      return (
+        highlightFromMarkerToEnd('Shots remaining:') ?? phaseSubInstruction
+      );
+    }
+
+    if (roleName === 'Trapper') {
+      return (
+        highlightFromMarkerToEnd('Alerts remaining:') ?? phaseSubInstruction
+      );
+    }
+
+    if (roleName === 'Doctor') {
+      return (
+        highlightExactSentence('You may protect yourself once per game.') ?? phaseSubInstruction
+      );
+    }
+
+    return phaseSubInstruction;
+  })();
   const eliminationResultsKey =
     eliminationResult?.noElimination === true
       ? `elim-result-none-${currentDayNumber ?? 0}`
@@ -280,49 +273,21 @@ export default function LobbyGamePage() {
         ? `elim-result-${eliminationResult.userId}`
         : `elim-result-waiting-${currentDayNumber ?? 0}`;
 
-  useEffect(() => {
-    if (effectiveDisplayPhase === 'day' || effectiveDisplayPhase === 'night')
-      return;
-    const id = setTimeout(() => {
-      setViewingNotebook(null);
-    }, 0);
-    return () => clearTimeout(id);
-  }, [effectiveDisplayPhase]);
-
-  useEffect(() => {
-    const id = setTimeout(() => {
-      if (currentPhase !== 'vote') setSelectedVoteTargetId(null);
-      if (effectiveDisplayPhase !== 'night') setSelectedNightActionTargetId(null);
-    }, 0);
-    return () => clearTimeout(id);
-  }, [currentPhase, effectiveDisplayPhase]);
-
-  useEffect(() => {
-    if (started) return;
-    if (!lobbyNameString) return;
-    if (lobbyInfo?.startingAt) return;
-    router.push(`/lobby/${encodeURIComponent(lobbyNameString)}`);
-  }, [lobbyInfo?.startingAt, started, lobbyNameString, router]);
-
-  useEffect(() => {
-    if (!lobbyInfo?.startingAt) return;
-    // Local clock tick for displaying "Starting in N seconds" without relying on server pushes.
-    const kickoffId = setTimeout(() => {
-      setNowMs(Date.now());
-    }, 0);
-    const id = setInterval(() => {
-      setNowMs(Date.now());
-    }, 250);
-    return () => {
-      clearTimeout(kickoffId);
-      clearInterval(id);
-    };
-  }, [lobbyInfo?.startingAt]);
-
   const isHost =
     !!session?.user?.id && !!hostUserId && session.user.id === hostUserId;
-  // Forces `GameChat` to refresh when phase/role/alive status changes (and thus the user's chat audience changes).
-  const chatRefreshKey = `${currentPhase}:${roleName}:${selfAlive ? 'alive' : 'dead'}:${started ? 'started' : 'stopped'}`;
+
+  /* -----------------------------------------------------------------------
+     Chat Refresh Key
+
+     Forces `GameChat` to refresh when phase/role/alive status changes (which
+     changes the user's chat audience/permissions).
+  ----------------------------------------------------------------------- */
+  const chatRefreshKey = buildChatRefreshKey({
+    currentPhase,
+    roleName,
+    selfAlive,
+    started,
+  });
   const roleToneClass =
     roleInfo?.faction === 'Enemy'
       ? 'reveal-role-werewolf'
@@ -334,8 +299,8 @@ export default function LobbyGamePage() {
       type="button"
       className="game-button-secondary max-w-xs mx-auto"
       onClick={() => {
-        if (!lobbyNameString) return;
-        endGame(lobbyNameString, (err: unknown, res: SocketAck | undefined) => {
+        if (!lobbyNameKey) return;
+        endGame(lobbyNameKey, (err: unknown, res: SocketAck | undefined) => {
           if (err || !res?.ok) {
             console.error(res?.error ?? 'Failed to end game');
           }
@@ -349,17 +314,7 @@ export default function LobbyGamePage() {
   return (
     <>
       {currentPhase === 'lobby' && lobbyInfo?.startingAt ? (
-        <div className="game-cinematic-scene min-h-[100svh] flex items-center justify-center px-4 sm:px-6 py-10 sm:py-12">
-          <div className="w-full max-w-3xl text-center space-y-4">
-            <p className="game-tight-label">Starting</p>
-            <h1 className="game-title">Game begins soon</h1>
-            <p className="text-slate-300 text-sm">
-              {startingRemainingSeconds !== null
-                ? `Starting in ${startingRemainingSeconds}s...`
-                : 'Preparing the lobby...'}
-            </p>
-          </div>
-        </div>
+        <GameStartingScene startingRemainingSeconds={startingRemainingSeconds} />
       ) : currentPhase === 'roleReveal' ? (
         <RoleRevealScene
           phaseEndsAt={currentPhaseEndsAt}
@@ -376,7 +331,6 @@ export default function LobbyGamePage() {
         />
       ) : currentPhase === 'endGame' ? (
         <EndGameScene
-          phaseEndsAt={currentPhaseEndsAt}
           didWin={didWin}
           endGameButton={endGameButton}
         />
@@ -393,26 +347,18 @@ export default function LobbyGamePage() {
             <div className="text-left">
               <p className="game-tight-label">Lobby</p>
               <h1 className="game-title text-left leading-tight">
-                {lobbyNameString ?? '...'}
+                {lobbyNameKey ?? '...'}
               </h1>
             </div>
-            <div className="game-box w-full sm:w-auto shrink-0 text-left sm:text-right sm:min-w-[11rem]">
-              <p className="game-tight-label">Role</p>
-              <div className="flex items-center justify-between sm:justify-end gap-2">
-                <p className="font-semibold text-slate-100">
-                  {roleDisplayName}
-                </p>
-                <RoleInfoPopover
-                  roleDisplayName={roleDisplayName}
-                  roleName={roleName}
-                  roleInfo={roleInfo}
-                  hunterShotsRemaining={hunterShotsRemaining}
-                  trapperAlertsRemaining={trapperAlertsRemaining}
-                  executionerTargetName={executionerTargetName}
-                  executionerTargetUserId={executionerTargetUserId}
-                />
-              </div>
-            </div>
+            <PlayerRoleCard
+              roleName={roleName}
+              roleDisplayName={roleDisplayName}
+              roleInfo={roleInfo}
+              hunterShotsRemaining={hunterShotsRemaining}
+              trapperAlertsRemaining={trapperAlertsRemaining}
+              executionerTargetName={executionerTargetName}
+              executionerTargetUserId={executionerTargetUserId}
+            />
           </header>
 
           <div className="mx-auto w-full max-w-3xl text-center space-y-6">
@@ -431,12 +377,10 @@ export default function LobbyGamePage() {
                   </p>
                 ) : null}
                 {phaseSubInstruction ? (
-                  <p className="text-slate-300 text-sm">
-                    {phaseSubInstruction}
-                  </p>
+                  <p className="text-slate-300 text-sm">{instructionNode}</p>
                 ) : null}
               </>
-              <div className="flex flex-col items-center gap-3">
+            <div className="flex flex-col items-center gap-3">
                 <PhaseTimer phaseEndsAt={currentPhaseEndsAt} />
                 {effectiveDisplayPhase === 'night' &&
                 roleName === 'Trapper' &&
@@ -457,8 +401,8 @@ export default function LobbyGamePage() {
                       (!trapperAlertActive && trapperAlertsRemaining <= 0)
                     }
                     onClick={() => {
-                      if (!lobbyNameString || currentPhase !== 'night') return;
-                      toggleTrapperAlert(lobbyNameString);
+                      if (!lobbyNameKey || currentPhase !== 'night') return;
+                      toggleTrapperAlert(lobbyNameKey);
                     }}
                   >
                     {trapperAlertActive ? (
@@ -481,9 +425,6 @@ export default function LobbyGamePage() {
                     ) : (
                       <span className="flex flex-col items-center justify-center leading-tight">
                         <span>Activate Alert</span>
-                        <span className="mt-1 text-[11px] font-semibold text-emerald-100/90">
-                          {trapperAlertsRemaining} left
-                        </span>
                       </span>
                     )}
                   </button>
@@ -496,7 +437,7 @@ export default function LobbyGamePage() {
               renderMemberRow={(member) => (
                 <MemberActionRow
                   key={member.userId}
-                  lobbyName={lobbyNameString}
+                  lobbyName={lobbyNameKey}
                   member={member}
                   currentPhase={currentPhase}
                   effectiveDisplayPhase={effectiveDisplayPhase}
@@ -524,51 +465,23 @@ export default function LobbyGamePage() {
           </div>
         </div>
       )}
-      {currentPhase !== 'nightResults' &&
-      currentPhase !== 'endGame' &&
-      currentPhase !== 'gameResults' ? (
-        <GameChat
-          lobbyName={lobbyNameString}
-          refreshKey={chatRefreshKey}
-          currentUserId={session?.user?.id}
-        />
-      ) : null}
-      {currentPhase !== 'roleReveal' &&
-      currentPhase !== 'endGame' &&
-      currentPhase !== 'gameResults' ? (
-        <GameNotebook
-          lobbyName={lobbyNameString}
-          userId={session?.user?.id}
-          canWrite={canWriteNotebook}
-          onNotesChange={(notes) => {
-            if (!lobbyNameString) return;
-            updateNotebook(lobbyNameString, notes);
-          }}
-        />
-      ) : null}
-      {viewingNotebook ? (
-        <NotebookModal
-          notebook={viewingNotebook}
-          onClose={() => setViewingNotebook(null)}
-        />
-      ) : null}
-      <div
-        key={phaseOverlayState.key}
-        className={[
-          'game-phase-overlay z-40',
-          phaseOverlayState.mode === 'fadeIn'
-            ? 'phase-overlay-fade-in'
-            : phaseOverlayState.mode === 'fadeOut'
-              ? 'phase-overlay-fade-out'
-              : 'opacity-0',
-        ].join(' ')}
+      <GameFloatingPanels
+        currentPhase={currentPhase}
+        lobbyName={lobbyNameKey}
+        currentUserId={session?.user?.id}
+        chatRefreshKey={chatRefreshKey}
+        canWriteNotebook={canWriteNotebook}
+        onNotesChange={(notes) => {
+          if (!lobbyNameKey) return;
+          updateNotebook(lobbyNameKey, notes);
+        }}
+        viewingNotebook={viewingNotebook}
+        onCloseNotebook={() => setViewingNotebook(null)}
       />
-      {currentPhase === 'gameResults' ? (
-        <div
-          key="results-route-fadeout"
-          className="game-phase-overlay z-50 phase-overlay-fade-out"
-        />
-      ) : null}
+      <GameOverlays
+        phaseOverlayState={phaseOverlayState}
+        showResultsFadeOut={currentPhase === 'gameResults'}
+      />
     </>
   );
 }

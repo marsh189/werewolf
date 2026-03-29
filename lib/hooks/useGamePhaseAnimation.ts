@@ -7,6 +7,11 @@ import type {
 } from '@/models/game';
 import { useEffect, useRef, useState } from 'react';
 
+/* ---------------------------------------------------------------------------
+   Animation Timing Constants (ms)
+
+   Centralized timing values so the animation hook and scenes stay consistent.
+--------------------------------------------------------------------------- */
 export const GAME_PHASE_ANIMATION_MS = {
   roleTitleLead: 1400,
   roleRevealHold: 3000,
@@ -22,6 +27,18 @@ export const GAME_PHASE_ANIMATION_MS = {
   phaseTransitionFade: 1200,
   nightResultsLineGap: 700,
 } as const;
+
+/* =============================================================================
+   Phase Animation Hook
+
+   This hook drives the "cinematic" feel of the game UI:
+   - role reveal sequencing
+   - night-results sequencing (multi-line + optional notebook reveal)
+   - cross-phase fade overlays
+
+   Important: the server is authoritative for phase timing (`phaseEndsAt`).
+   The client uses those timestamps to schedule animations locally.
+============================================================================= */
 
 export function useGamePhaseAnimation({
   currentPhase,
@@ -51,6 +68,10 @@ export function useGamePhaseAnimation({
   const previousPhaseRef = useRef<GamePhase | null>(null);
 
   useEffect(() => {
+    /* -------------------------------------------------------------------------
+       Role reveal sequencing
+    ------------------------------------------------------------------------- */
+
     if (currentPhase !== 'roleReveal') {
       const resetId = setTimeout(() => {
         setRevealState('hidden');
@@ -90,6 +111,13 @@ export function useGamePhaseAnimation({
   }, [currentPhase, currentPhaseEndsAt]);
 
   useEffect(() => {
+    /* -------------------------------------------------------------------------
+       Night results sequencing
+
+       Uses `nightResultsSequenceKey` to avoid re-scheduling timers when we
+       receive duplicate lobby snapshots for the same reveal.
+    ------------------------------------------------------------------------- */
+
     if (currentPhase !== 'nightResults') {
       lastNightResultsSequenceRef.current = null;
       const resetId = setTimeout(() => {
@@ -172,6 +200,10 @@ export function useGamePhaseAnimation({
   }, [currentPhase, currentPhaseEndsAt, nightResultsSequenceKey, revealDeathUserId]);
 
   useEffect(() => {
+    /* -------------------------------------------------------------------------
+       Fade-in overlay (on phase entry)
+    ------------------------------------------------------------------------- */
+
     const previousPhase = previousPhaseRef.current;
     previousPhaseRef.current = currentPhase;
 
@@ -203,6 +235,13 @@ export function useGamePhaseAnimation({
   }, [currentDayNumber, currentPhase]);
 
   useEffect(() => {
+    /* -------------------------------------------------------------------------
+       Fade-out overlay (on phase exit)
+
+       Some phases (day, night) intentionally do not fade out to keep the
+       game flow snappy and reduce perceived "stutter" between snapshots.
+    ------------------------------------------------------------------------- */
+
     if (!currentPhaseEndsAt) return;
     const skipFadeOut =
       (currentPhase === 'day' && (currentDayNumber ?? 0) > 0) ||

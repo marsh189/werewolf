@@ -50,8 +50,29 @@ export const setSocketViewPresence = ({ io, socket, userId, lobbyName, view }) =
   const previous = socket.data?.viewPresence ?? null;
   const previousLobbyName = previous?.lobbyName ?? null;
   const previousView = previous?.view ?? null;
+
+  // Fast path: if the client re-sends the same state (common in dev Strict Mode),
+  // treat it as a no-op to avoid extra lobby update spam.
+  if (previousLobbyName === lobbyName && previousView === view) {
+    return { ok: true };
+  }
+
   const wasInGame = previousView === 'game' || previousView === 'results';
   const nowInGame = view === 'game' || view === 'results';
+
+  // If we're staying inside the same lobby, we can apply the delta once and emit once.
+  if (previousLobbyName === lobbyName) {
+    const delta = wasInGame === nowInGame ? 0 : nowInGame ? 1 : -1;
+    socket.data.viewPresence = { lobbyName, view };
+
+    if (delta !== 0) {
+      updateInGamePresence(lobby, userId, delta);
+    }
+
+    maybeAutoResetEndedGame(io, lobby);
+    emitLobbyUpdate(io, lobby);
+    return { ok: true };
+  }
 
   if (previousLobbyName && wasInGame) {
     const previousLobby = getLobby(previousLobbyName);

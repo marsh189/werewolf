@@ -255,4 +255,3 @@ export const assignRolesToLobby = (lobby) => {
 
   lobby.playerRoleState = initialRoleState;
 };
-
