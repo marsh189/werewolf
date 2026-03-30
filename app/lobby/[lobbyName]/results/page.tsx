@@ -53,15 +53,46 @@ export default function LobbyResultsPage() {
     );
   }
 
+  const outcome = results.winningFaction ?? 'Village';
+  const { title, subtitle, titleToneClass } = (() => {
+    if (outcome === 'Executioner') {
+      return {
+        title: 'Executioner Wins',
+        subtitle: "The Executioner's target was executed by vote.",
+        titleToneClass: 'text-amber-200',
+      };
+    }
+
+    if (outcome === 'Jester') {
+      return {
+        title: 'Jester Wins',
+        subtitle: 'The Jester was executed by vote. Chaos wins.',
+        titleToneClass: 'text-violet-200',
+      };
+    }
+
+    if (outcome === 'Enemy') {
+      return {
+        title: 'Werewolves Win',
+        subtitle: 'The village has fallen.',
+        titleToneClass: 'text-red-200',
+      };
+    }
+
+    return {
+      title: 'Villagers Win',
+      subtitle: 'The last werewolf has been eliminated.',
+      titleToneClass: 'text-emerald-200',
+    };
+  })();
+
   return (
     <div className="game-cinematic-scene min-h-[100svh] flex flex-col px-4 sm:px-6 py-10 sm:py-12">
       <div className="mx-auto w-full max-w-3xl space-y-6 flex-1">
         <header className="text-center space-y-2">
           <p className="game-tight-label">Final</p>
-          <h1 className="game-title text-emerald-200">Village Victory</h1>
-          <p className="text-slate-300 text-sm">
-            The last werewolf has been eliminated.
-          </p>
+          <h1 className={['game-title', titleToneClass].join(' ')}>{title}</h1>
+          <p className="text-slate-300 text-sm">{subtitle}</p>
         </header>
 
         <div className="space-y-3">
@@ -112,7 +143,7 @@ export default function LobbyResultsPage() {
                       </span>
                       {!player.alive ? (
                         <span className="text-amber-200">
-                          {` • ${player.eliminationSummary ?? 'Eliminated.'}`}
+                          {` - ${player.eliminationSummary ?? 'Eliminated.'}`}
                         </span>
                       ) : null}
                       {player.faction ? (
@@ -128,7 +159,7 @@ export default function LobbyResultsPage() {
                                   : 'text-slate-200',
                           ].join(' ')}
                         >
-                          {` • ${player.faction}`}
+                          {` - ${player.faction}`}
                         </span>
                       ) : null}
                     </p>

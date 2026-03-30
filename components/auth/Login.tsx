@@ -108,7 +108,7 @@ export default function Login() {
               <div className="space-y-3">
                 <label className="game-label">Password</label>
                 <input
-                  placeholder="••••••••"
+                  placeholder="********"
                   type="password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}

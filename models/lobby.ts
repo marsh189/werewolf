@@ -26,7 +26,7 @@ export type GameResultsPlayer = {
 };
 
 export type GameResults = {
-  winningFaction: 'Village';
+  winningFaction: 'Village' | 'Enemy' | 'Executioner' | 'Jester';
   endedAt: number;
   players: GameResultsPlayer[];
 };

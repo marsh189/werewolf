@@ -34,9 +34,9 @@ export const ROLES = {
   AlphaWolf: {
     faction: 'Enemy',
     category: 'Killing',
-    ability: 'Choose the werewolves’ kill target each night.',
+    ability: "Choose the werewolves' kill target each night.",
     nightInstruction:
-      'Choose the werewolves’ kill target tonight. Coordinate with other werewolves in secret chat.',
+      "Choose the werewolves' kill target tonight. Coordinate with other werewolves in secret chat.",
     winCondition: 'Enemy team wins when werewolves reach parity with Village.',
     revealSummary: 'You lead the hunt. Every night, your choice shapes who sees dawn.',
   },

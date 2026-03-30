@@ -21,7 +21,7 @@ export const getAliveWerewolfIds = (lobby, aliveAtNightStart) =>
     )
     .map(([userId]) => userId);
 
-const buildGameResultsSnapshot = (lobby) => {
+const buildGameResultsSnapshot = (lobby, winningFaction) => {
   const players = Array.from(lobby.members.values()).map((member) => {
     const role = lobby.playerRoles?.get(member.userId) ?? null;
     const eliminationSummary =
@@ -36,7 +36,7 @@ const buildGameResultsSnapshot = (lobby) => {
     };
   });
   return {
-    winningFaction: 'Village',
+    winningFaction: winningFaction ?? 'Village',
     endedAt: Date.now(),
     players,
   };
@@ -50,12 +50,12 @@ const getAliveWerewolfCount = (lobby) =>
       isWerewolfRole(role),
   ).length;
 
-const startVillageVictoryPhase = (io, lobby) => {
+const startVictoryPhase = (io, lobby, winningFaction) => {
   if (lobby.gameResults) return;
   lobby.gamePhase = 'endGame';
   lobby.currentNightDeathReveal = null;
   lobby.currentEliminationResult = null;
-  lobby.gameResults = buildGameResultsSnapshot(lobby);
+  lobby.gameResults = buildGameResultsSnapshot(lobby, winningFaction);
 
   schedulePhaseTransition(io, lobby, END_GAME_PHASE_DURATION_MS, () => {
     lobby.gamePhase = 'gameResults';
@@ -70,6 +70,34 @@ export const maybeTriggerVillageWin = (io, lobby) => {
   if (lobby.gameResults) return false;
   if (lobby.gamePhase === 'endGame' || lobby.gamePhase === 'gameResults') return false;
   if (getAliveWerewolfCount(lobby) !== 0) return false;
-  startVillageVictoryPhase(io, lobby);
+  startVictoryPhase(io, lobby, 'Village');
   return true;
+};
+
+export const maybeTriggerNeutralWinByVote = (io, lobby, votedOutUserId) => {
+  if (!lobby?.started) return false;
+  if (lobby.gameResults) return false;
+  if (lobby.gamePhase === 'endGame' || lobby.gamePhase === 'gameResults') return false;
+  if (!votedOutUserId) return false;
+
+  const votedOutRole = lobby.playerRoles?.get(votedOutUserId) ?? null;
+  if (votedOutRole === 'Jester') {
+    startVictoryPhase(io, lobby, 'Jester');
+    return true;
+  }
+
+  const executionerIds = Array.from(lobby.playerRoles?.entries() ?? [])
+    .filter(([, role]) => role === 'Executioner')
+    .map(([userId]) => userId);
+
+  for (const executionerUserId of executionerIds) {
+    const roleState = lobby.playerRoleState?.get(executionerUserId) ?? null;
+    const targetUserId = roleState?.executionerTargetUserId ?? null;
+    if (targetUserId && targetUserId === votedOutUserId) {
+      startVictoryPhase(io, lobby, 'Executioner');
+      return true;
+    }
+  }
+
+  return false;
 };

@@ -1,7 +1,10 @@
 import { ELIMINATION_RESULTS_DURATION_MS } from '../../../../state/constants.js';
 import { emitLobbyUpdate } from '../../../lobbyEmitService.js';
 import { setEliminationInfo } from '../../../game/eliminationService.js';
-import { maybeTriggerVillageWin } from '../../../game/gameResultsService.js';
+import {
+  maybeTriggerNeutralWinByVote,
+  maybeTriggerVillageWin,
+} from '../../../game/gameResultsService.js';
 import { schedulePhaseTransition } from '../../../game/gamePhaseUtils.js';
 
 /* =============================================================================
@@ -39,7 +42,12 @@ export const createVotePhases = ({ getStartNightPhase }) => {
     lobby.gamePhase = 'eliminationResults';
     lobby.currentNightDeathReveal = null;
     schedulePhaseTransition(io, lobby, ELIMINATION_RESULTS_DURATION_MS, () => {
+      const votedOutUserId =
+        lobby.currentEliminationResult && !lobby.currentEliminationResult.noElimination
+          ? lobby.currentEliminationResult.userId
+          : null;
       lobby.currentEliminationResult = null;
+      if (maybeTriggerNeutralWinByVote(io, lobby, votedOutUserId)) return;
       if (maybeTriggerVillageWin(io, lobby)) return;
       getStartNightPhase()(io, lobby, (lobby.nightNumber ?? 0) + 1);
     });
@@ -95,4 +103,3 @@ export const createVotePhases = ({ getStartNightPhase }) => {
     startVotePhase,
   };
 };
-

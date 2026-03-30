@@ -169,7 +169,16 @@ export default function LobbyGamePage() {
   const roleName = role ?? 'Unknown';
   const roleInfo = role && role in ROLES ? ROLES[role as Role] : null;
   const roleDisplayName = getRoleDisplayName(roleName);
-  const didWin = roleInfo ? roleInfo.faction === 'Village' : null;
+  const winningFaction = lobbyInfo?.gameResults?.winningFaction ?? null;
+  const didWin = (() => {
+    if (!roleInfo) return null;
+    if (!winningFaction) return roleInfo.faction === 'Village';
+    if (winningFaction === 'Village') return roleInfo.faction === 'Village';
+    if (winningFaction === 'Enemy') return roleInfo.faction === 'Enemy';
+    if (winningFaction === 'Jester') return roleName === 'Jester';
+    if (winningFaction === 'Executioner') return roleName === 'Executioner';
+    return null;
+  })();
   const phaseSubLabel =
     effectiveDisplayPhase === 'day'
       ? 'The village gathers by torchlight.'
@@ -291,6 +300,10 @@ export default function LobbyGamePage() {
   const roleToneClass =
     roleInfo?.faction === 'Enemy'
       ? 'reveal-role-werewolf'
+      : roleName === 'Jester'
+        ? 'reveal-role-jester'
+        : roleName === 'Executioner'
+          ? 'reveal-role-executioner'
       : roleName === 'Villager'
         ? 'reveal-role-villager'
         : 'reveal-role-special';
@@ -332,6 +345,7 @@ export default function LobbyGamePage() {
       ) : currentPhase === 'endGame' ? (
         <EndGameScene
           didWin={didWin}
+          winningFaction={winningFaction}
           endGameButton={endGameButton}
         />
       ) : currentPhase === 'gameResults' ? (
