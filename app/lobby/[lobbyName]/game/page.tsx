@@ -25,7 +25,10 @@ import {
   buildNightResultsSequenceKey,
   sortMembersAliveFirst,
 } from '@/lib/selectors/gameUiSelectors';
-import { getStartingRemainingSeconds } from '@/lib/selectors/lobbyUiSelectors';
+import {
+  DEFAULT_PHASE_DURATIONS,
+  getStartingRemainingSeconds,
+} from '@/lib/selectors/lobbyUiSelectors';
 import { normalizeLobbyNameParam } from '@/lib/routes/lobbyName';
 import { getRoleDisplayName, ROLES } from '@/models/roles';
 import type { NightInstructionContext, Role } from '@/models/roles';
@@ -145,6 +148,17 @@ export default function LobbyGamePage() {
     lobbyInfo?.startingAt,
     nowMs,
   );
+  const phaseDurations = lobbyInfo?.phaseDurations ?? DEFAULT_PHASE_DURATIONS;
+  const phaseDurationMs =
+    currentPhase === 'day'
+      ? (phaseDurations.daySeconds ?? DEFAULT_PHASE_DURATIONS.daySeconds) * 1000
+      : currentPhase === 'night'
+        ? (phaseDurations.nightSeconds ?? DEFAULT_PHASE_DURATIONS.nightSeconds) *
+          1000
+        : currentPhase === 'vote'
+          ? (phaseDurations.voteSeconds ?? DEFAULT_PHASE_DURATIONS.voteSeconds) *
+            1000
+          : null;
 
   /* -----------------------------------------------------------------------
      Phase Animations
@@ -395,7 +409,13 @@ export default function LobbyGamePage() {
                 ) : null}
               </>
             <div className="flex flex-col items-center gap-3">
-                <PhaseTimer phaseEndsAt={currentPhaseEndsAt} />
+                {currentPhase !== 'nightActionResults' &&
+                currentPhase !== 'eliminationResults' ? (
+                  <PhaseTimer
+                    phaseEndsAt={currentPhaseEndsAt}
+                    phaseDurationMs={phaseDurationMs}
+                  />
+                ) : null}
                 {effectiveDisplayPhase === 'night' &&
                 roleName === 'Trapper' &&
                 selfAlive ? (

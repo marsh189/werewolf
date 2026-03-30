@@ -248,10 +248,9 @@ export function useGamePhaseAnimation({
       currentPhase === 'night';
     if (skipFadeOut) return;
 
-    const delay = Math.max(
-      0,
-      currentPhaseEndsAt - Date.now() - GAME_PHASE_ANIMATION_MS.phaseTransitionFade,
-    );
+    // Start the fade when the timer would display "0" (sub-1s remaining),
+    // rather than at "1". This avoids the fade appearing to begin early.
+    const delay = Math.max(0, currentPhaseEndsAt - Date.now() - 999);
     const startId = setTimeout(() => {
       setPhaseOverlayState((previous) => ({
         mode: 'fadeOut',

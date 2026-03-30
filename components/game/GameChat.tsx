@@ -26,6 +26,8 @@ export default function GameChat({
   const isDesktop = useMediaQuery(DESKTOP_MEDIA_QUERY);
   const [mobileOpen, setMobileOpen] = useState(false);
   const isOpen = isDesktop ? true : mobileOpen;
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [stickToBottom, setStickToBottom] = useState(true);
   const [channels, setChannels] = useState<ChatChannel[]>([]);
   const [history, setHistory] = useState<Partial<Record<ChatChannel, ChatMessage[]>>>(
     {},
@@ -57,6 +59,7 @@ export default function GameChat({
           ? current
           : (response.chat?.channels[0] ?? null),
       );
+      setUnreadCount(0);
     });
   }, [lobbyName, refreshKey]);
 
@@ -72,6 +75,16 @@ export default function GameChat({
           [message.channel]: nextMessages,
         };
       });
+
+      const isRelevantChannel = !activeChannel || message.channel === activeChannel;
+      const shouldCountAsUnread =
+        isRelevantChannel &&
+        ((!isDesktop && !isOpen) || shouldStickToBottomRef.current === false);
+
+      if (shouldCountAsUnread) {
+        setUnreadCount((current) => current + 1);
+      }
+
       callback?.({ ok: true });
     };
 
@@ -86,7 +99,7 @@ export default function GameChat({
     return () => {
       socket.off('chat:message', onChatMessage);
     };
-  }, []);
+  }, [activeChannel, isDesktop, isOpen]);
 
   const activeMessages = activeChannel ? history[activeChannel] ?? [] : [];
   const activeChannelCanSend = activeChannel ? canSend[activeChannel] === true : false;
@@ -115,10 +128,18 @@ export default function GameChat({
     return (
       <button
         type="button"
-        className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-40 inline-flex h-12 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-950/92 px-4 text-xs font-semibold text-slate-100 shadow-2xl backdrop-blur transition hover:bg-slate-900"
-        onClick={() => setMobileOpen(true)}
+        className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] left-4 z-40 inline-flex h-12 items-center justify-center gap-2 rounded-full border border-slate-700 bg-slate-950/92 px-4 text-xs font-semibold text-slate-100 shadow-2xl backdrop-blur transition hover:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/80"
+        onClick={() => {
+          setMobileOpen(true);
+          setUnreadCount(0);
+        }}
       >
-        Chat
+        <span>Chat</span>
+        {unreadCount > 0 ? (
+          <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-black text-slate-900">
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </span>
+        ) : null}
       </button>
     );
   }
@@ -156,7 +177,7 @@ export default function GameChat({
           {!isDesktop ? (
             <button
               type="button"
-              className="rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 hover:bg-slate-800/60"
+              className="rounded-lg border border-slate-700 bg-slate-900/60 px-2.5 py-1.5 text-[11px] font-semibold text-slate-200 hover:bg-slate-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/80"
               onClick={() => setMobileOpen(false)}
             >
               Close
@@ -170,6 +191,7 @@ export default function GameChat({
                   type="button"
                   className={[
                     'rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] transition-colors',
+                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/70',
                     activeChannel === channel
                       ? 'border-amber-400/70 bg-amber-500/15 text-amber-200'
                       : 'border-slate-700 bg-slate-900/60 text-slate-300 hover:border-slate-500',
@@ -177,6 +199,9 @@ export default function GameChat({
                   onClick={() => {
                     setActiveChannel(channel);
                     setError(null);
+                    setUnreadCount(0);
+                    shouldStickToBottomRef.current = true;
+                    setStickToBottom(true);
                   }}
                 >
                   {CHANNEL_LABELS[channel]}
@@ -187,75 +212,101 @@ export default function GameChat({
         </div>
       </div>
 
-      <div
-        ref={messagePaneRef}
-        className="lobby-scroll mt-3 h-[min(45svh,18rem)] overflow-y-scroll pr-1 sm:h-44"
-        onScroll={(event) => {
-          const pane = event.currentTarget;
-          const distanceFromBottom =
-            pane.scrollHeight - pane.scrollTop - pane.clientHeight;
-          shouldStickToBottomRef.current = distanceFromBottom < 24;
-        }}
-      >
-        <div className="flex min-h-full flex-col justify-end gap-2">
-          {activeMessages.length > 0 ? (
-            activeMessages.map((message) => (
-              <article
-                key={message.id}
-                className={
-                  message.userId === 'system' && message.tone === 'death'
-                    ? 'w-full rounded-md border border-red-400/70 bg-red-700/30 px-2 py-1.5 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.12)]'
-                    : 'border-b border-slate-800/70 pb-1 last:border-b-0'
-                }
-              >
-                <div className="flex items-baseline gap-2">
-                  {message.userId !== 'system' ? (
+      <div className="relative">
+        <div
+          ref={messagePaneRef}
+          className="lobby-scroll mt-3 h-[min(45svh,18rem)] overflow-y-scroll pr-1 sm:h-44"
+          onScroll={(event) => {
+            const pane = event.currentTarget;
+            const distanceFromBottom =
+              pane.scrollHeight - pane.scrollTop - pane.clientHeight;
+            const nextStick = distanceFromBottom < 24;
+            shouldStickToBottomRef.current = nextStick;
+            setStickToBottom(nextStick);
+            if (nextStick) setUnreadCount(0);
+          }}
+        >
+          <div className="flex min-h-full flex-col justify-end gap-2">
+            {activeMessages.length > 0 ? (
+              activeMessages.map((message) => (
+                <article
+                  key={message.id}
+                  className={
+                    message.userId === 'system' && message.tone === 'death'
+                      ? 'w-full rounded-md border border-red-400/70 bg-red-700/30 px-2 py-1.5 shadow-[inset_0_0_0_1px_rgba(239,68,68,0.12)]'
+                      : 'border-b border-slate-800/70 pb-1 last:border-b-0'
+                  }
+                >
+                  <div className="flex items-baseline gap-2">
+                    {message.userId !== 'system' ? (
+                      <p
+                        className={[
+                          'shrink-0 text-[11px] font-semibold',
+                          message.audience === 'dead'
+                            ? 'text-slate-500'
+                            : message.audience === 'werewolf'
+                              ? 'text-red-400'
+                              : message.userId === currentUserId
+                                ? 'text-sky-300'
+                                : 'text-amber-300',
+                        ].join(' ')}
+                      >
+                        {message.name}:
+                      </p>
+                    ) : null}
                     <p
                       className={[
-                        'shrink-0 text-[11px] font-semibold',
-                        message.audience === 'dead'
-                          ? 'text-slate-500'
-                          : message.audience === 'werewolf'
-                            ? 'text-red-400'
-                            : message.userId === currentUserId
-                              ? 'text-sky-300'
-                              : 'text-amber-300',
+                        'min-w-0 flex-1 whitespace-pre-wrap break-words text-xs leading-5',
+                        message.userId === 'system'
+                          ? message.tone === 'death'
+                            ? 'font-semibold text-red-50'
+                            : 'italic text-slate-400'
+                          : 'text-slate-300',
                       ].join(' ')}
                     >
-                      {message.name}:
+                      {message.content}
                     </p>
-                  ) : null}
-                  <p
-                    className={[
-                      'min-w-0 flex-1 whitespace-pre-wrap break-words text-xs leading-5',
-                      message.userId === 'system'
-                        ? message.tone === 'death'
-                          ? 'font-semibold text-red-50'
-                          : 'italic text-slate-400'
-                        : 'text-slate-300',
-                    ].join(' ')}
-                  >
-                    {message.content}
-                  </p>
-                  <p
-                    className={[
-                      'shrink-0 text-[10px]',
-                      message.userId === 'system' && message.tone === 'death'
-                        ? 'text-red-100/80'
-                        : 'text-slate-500',
-                    ].join(' ')}
-                  >
-                    {formatChatTimestamp(message.sentAt)}
-                  </p>
-                </div>
-              </article>
-            ))
-          ) : (
-            <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900/40 px-3 py-5 text-center text-xs text-slate-500">
-              No messages yet.
-            </div>
-          )}
+                    <p
+                      className={[
+                        'shrink-0 text-[10px]',
+                        message.userId === 'system' && message.tone === 'death'
+                          ? 'text-red-100/80'
+                          : 'text-slate-500',
+                      ].join(' ')}
+                    >
+                      {formatChatTimestamp(message.sentAt)}
+                    </p>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="rounded-lg border border-dashed border-slate-800 bg-slate-900/40 px-3 py-5 text-center text-xs text-slate-500">
+                No messages yet.
+              </div>
+            )}
+          </div>
         </div>
+
+        {!stickToBottom ? (
+          <button
+            type="button"
+            className="absolute bottom-2 right-2 inline-flex items-center gap-2 rounded-full border border-slate-700 bg-slate-950/90 px-3 py-1.5 text-[11px] font-semibold text-slate-100 shadow-lg backdrop-blur transition hover:bg-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80"
+            onClick={() => {
+              const pane = messagePaneRef.current;
+              if (pane) pane.scrollTop = pane.scrollHeight;
+              shouldStickToBottomRef.current = true;
+              setStickToBottom(true);
+              setUnreadCount(0);
+            }}
+          >
+            Jump to latest
+            {unreadCount > 0 ? (
+              <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-amber-400 px-1.5 py-0.5 text-[10px] font-black text-slate-900">
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </span>
+            ) : null}
+          </button>
+        ) : null}
       </div>
 
       <form
@@ -296,7 +347,7 @@ export default function GameChat({
             type="submit"
             disabled={!activeChannelCanSend}
             className={[
-              'rounded-lg border px-3 py-2 text-xs font-semibold transition',
+              'rounded-lg border px-3 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/80',
               activeChannelCanSend
                 ? 'border-slate-700 bg-slate-800/80 text-white hover:bg-slate-800'
                 : 'cursor-not-allowed border-slate-900 bg-slate-950 text-slate-500',

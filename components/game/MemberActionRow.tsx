@@ -155,13 +155,14 @@ export default function MemberActionRow({
     <button
       type="button"
       disabled={!isActionable || !lobbyName}
+      aria-pressed={isSelectedTarget}
       aria-label={
         isActionable
           ? `${member.name} is selectable`
           : `${member.name} is not selectable right now`
       }
       className={[
-        'game-box relative w-full text-left transition-all duration-150',
+        'game-box relative w-full text-left transition-all duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/80',
         isActionable
           ? 'cursor-pointer border-sky-500/50 bg-sky-500/10 hover:bg-sky-500/20 hover:border-sky-400/70 hover:translate-y-[-1px]'
           : 'opacity-50 cursor-not-allowed border-slate-700/50 bg-slate-900/40',
