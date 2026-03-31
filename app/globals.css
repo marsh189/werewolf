@@ -205,11 +205,11 @@ body {
 }
 
 .reveal-role-executioner {
-  color: #fde68a;
+  color: #cbd5e1;
   text-shadow:
-    0 0 10px rgba(253, 230, 138, 0.7),
-    0 0 34px rgba(251, 191, 36, 0.45),
-    0 0 68px rgba(245, 158, 11, 0.35);
+    0 0 10px rgba(203, 213, 225, 0.55),
+    0 0 34px rgba(148, 163, 184, 0.35),
+    0 0 68px rgba(71, 85, 105, 0.22);
 }
 
 .reveal-role-placeholder {

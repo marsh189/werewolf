@@ -4,9 +4,33 @@ import Google from 'next-auth/providers/google';
 import Credentials from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import GitHub from 'next-auth/providers/github';
+import { PrismaAdapter } from '@auth/prisma-adapter';
+import { prisma } from './lib/prisma';
 import { tempUsers } from './lib/tempUsers';
 
-// ✅ Custom error classes
+const isDbEnabled = Boolean(process.env.DATABASE_URL);
+const dbAdapter = isDbEnabled
+  ? (() => {
+      const baseAdapter = PrismaAdapter(prisma);
+
+      return {
+        ...baseAdapter,
+        async createUser(user: unknown) {
+          const data = { ...(user as Record<string, unknown>) };
+          delete data.emailVerified;
+          delete data.image;
+          return baseAdapter.createUser!(data as never);
+        },
+        async updateUser(user: unknown) {
+          const data = { ...(user as Record<string, unknown>) };
+          delete data.emailVerified;
+          delete data.image;
+          return baseAdapter.updateUser!(data as never);
+        },
+      };
+    })()
+  : undefined;
+
 class NoUserError extends CredentialsSignin {
   code = 'NO_USER';
 }
@@ -16,8 +40,12 @@ class BadPasswordError extends CredentialsSignin {
 class MissingFieldsError extends CredentialsSignin {
   code = 'MISSING_FIELDS';
 }
+class NoPasswordError extends CredentialsSignin {
+  code = 'NO_PASSWORD';
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  adapter: dbAdapter,
   session: {
     strategy: 'jwt',
   },
@@ -46,9 +74,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const email = String(rawEmail).toLowerCase().trim();
         const password = String(rawPassword);
 
-        const user = tempUsers.find(
-          (u) => u.email.toLowerCase().trim() === email,
-        );
+        if (isDbEnabled) {
+          const dbUser = await prisma.user.findUnique({ where: { email } });
+          if (!dbUser) throw new NoUserError();
+          if (!dbUser.passwordHash) throw new NoPasswordError();
+
+          const isValid = await bcrypt.compare(password, dbUser.passwordHash);
+          if (!isValid) throw new BadPasswordError();
+
+          return {
+            id: dbUser.id,
+            email: dbUser.email ?? undefined,
+            name: dbUser.name ?? undefined,
+          };
+        }
+
+        const user = tempUsers.find((u) => u.email.toLowerCase().trim() === email);
         if (!user) throw new NoUserError();
 
         const isValid = await bcrypt.compare(password, user.passwordHash);
@@ -72,5 +113,4 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       return session;
     },
   },
-
 });

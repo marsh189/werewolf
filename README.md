@@ -14,6 +14,45 @@ pnpm dev
 bun dev
 ```
 
+## Tests
+
+```bash
+npm test
+```
+
+## Database (Postgres)
+
+User accounts persist in Postgres when `DATABASE_URL` is set (Prisma + NextAuth Prisma adapter). If `DATABASE_URL` is not set, the app falls back to an in-memory user store for dev/test.
+
+1. Set `DATABASE_URL` (example):
+
+```bash
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/werewolf?schema=public"
+```
+
+2. Create/apply migrations:
+
+```bash
+npm run db:migrate
+```
+
+3. Start the app:
+
+```bash
+npm run dev
+```
+
+## E2E
+
+```bash
+npm run e2e:install
+npm run e2e
+```
+
+## CI
+
+- Runs `npm run lint`, `npm run build`, `npm test`, and `npm run e2e` on PRs via GitHub Actions.
+
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.

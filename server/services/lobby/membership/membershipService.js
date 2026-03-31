@@ -9,6 +9,7 @@ import { removeUserFromLobbyState } from '../../lobbyCleanupService.js';
 import { emitLobbiesList, emitLobbyUpdate } from '../../lobbyEmitService.js';
 import { clearLobbyTimeouts } from '../timing/timeoutService.js';
 import { createMember } from '../state/factoryService.js';
+import { logInfo } from '../../../logger.js';
 
 /* =============================================================================
    Lobby Membership
@@ -42,7 +43,12 @@ export const leaveLobby = (io, socket, lobbyName) => {
     lobby.hostUserId = lobby.members.values().next().value.userId;
   }
 
-  console.log(`connected ${socket.id} (${user?.email}) left lobby ${lobby.name}`);
+  logInfo('leave_lobby', {
+    socketId: socket.id,
+    userId: user?.id ?? null,
+    email: user?.email ?? null,
+    lobbyName: lobby.name,
+  });
 
   emitLobbiesList(io);
   emitLobbyUpdate(io, lobby);
@@ -100,9 +106,13 @@ export const joinLobby = (io, socket, lobby) => {
   const didChangeJoinState = !alreadyMember || !alreadyInRoom || !sameSocket;
 
   if (didChangeJoinState) {
-    console.log(
-      `connected ${socket.id} (${user?.email}) joined lobby ${lobby.name}`,
-    );
+    logInfo('join_lobby_room', {
+      socketId: socket.id,
+      userId: user?.id ?? null,
+      email: user?.email ?? null,
+      lobbyName: lobby.name,
+      reconnect: alreadyMember && sameSocket === false,
+    });
 
     emitLobbyUpdate(io, lobby);
     emitLobbiesList(io);

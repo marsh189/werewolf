@@ -26,6 +26,7 @@ import {
   requireSameCurrentLobby,
 } from './shared.js';
 import { CLIENT_EVENTS } from '../events.js';
+import { logInfo, logWarn } from '../../logger.js';
 
 export const registerLobbyHandlers = ({ io, socket, user }) => {
   /* =============================================================================
@@ -46,10 +47,16 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
 
     const current = getUserLobby(user.id);
     if (current && current !== name) {
+      logWarn('join_lobby_denied', {
+        userId: user.id,
+        lobbyName: name,
+        reason: 'Already in another lobby',
+      });
       return ack({ ok: false, error: 'Already in another lobby' });
     }
 
     joinLobby(io, socket, lobby);
+    logInfo('join_lobby', { userId: user.id, lobbyName: name });
     return ack({ ok: true, lobbyName: name });
   });
 
@@ -58,16 +65,26 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     const name = parseLobbyNameInput({ lobbyName });
 
     if (!name) {
+      logWarn('create_lobby_denied', {
+        userId: user.id,
+        reason: 'Invalid Lobby Name',
+      });
       return ack({ ok: false, error: 'Invalid Lobby Name' });
     }
 
     const lobbyExists = io.sockets.adapter.rooms.has(name) || hasLobby(name);
     if (lobbyExists) {
+      logWarn('create_lobby_denied', {
+        userId: user.id,
+        lobbyName: name,
+        reason: 'Lobby Name Already Exists',
+      });
       return ack({ ok: false, error: 'Lobby Name Already Exists' });
     }
 
     const lobby = createLobby(name, user);
     joinLobby(io, socket, lobby);
+    logInfo('create_lobby', { userId: user.id, lobbyName: name });
     return ack({ ok: true, lobbyName: name });
   });
 
@@ -145,13 +162,24 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     const { ack, lobby } = requireAckAndLobby(data, callback);
     if (!lobby) return;
     if (!requireHost(lobby, user.id)) {
+      logWarn('start_game_denied', {
+        userId: user.id,
+        lobbyName: lobby.name,
+        reason: 'Only host can start the game',
+      });
       return ack({ ok: false, error: 'Only host can start the game' });
     }
     if (lobby.started) {
+      logWarn('start_game_denied', {
+        userId: user.id,
+        lobbyName: lobby.name,
+        reason: 'Game already started',
+      });
       return ack({ ok: false, error: 'Game already started' });
     }
 
     const startingAt = scheduleGameStart(io, lobby);
+    logInfo('start_game', { userId: user.id, lobbyName: lobby.name, startingAt });
     return ack({ ok: true, startingAt });
   });
 
@@ -166,6 +194,7 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     }
 
     endGameForLobby(io, lobby);
+    logInfo('end_game', { userId: user.id, lobbyName: lobby.name });
     return ack({ ok: true });
   });
 
@@ -207,6 +236,14 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     }
 
     emitLobbyUpdate(io, lobby);
+    logInfo('lobby_update_settings', {
+      userId: user.id,
+      lobbyName: lobby.name,
+      werewolfCount: lobby.werewolfCount,
+      specialRolesEnabled: lobby.specialRolesEnabled === true,
+      neutralRolesEnabled: lobby.neutralRolesEnabled === true,
+      phaseDurations: lobby.phaseDurations ?? null,
+    });
     return ack({ ok: true });
   });
 

@@ -7,9 +7,23 @@
 
 export const schedulePhaseTransition = (io, lobby, durationMs, onComplete) => {
   if (lobby.phaseTimeoutId) clearTimeout(lobby.phaseTimeoutId);
+  const startedAt = Date.now();
   lobby.phaseEndsAt = Date.now() + durationMs;
   lobby.phaseTimeoutId = setTimeout(() => {
     lobby.phaseTimeoutId = null;
+    const driftMs = Date.now() - (startedAt + durationMs);
+    if (Math.abs(driftMs) >= 250) {
+      console.warn(
+        JSON.stringify({
+          ts: new Date().toISOString(),
+          level: 'warn',
+          message: 'phase_timer_drift',
+          lobbyName: lobby.name ?? null,
+          durationMs,
+          driftMs,
+        }),
+      );
+    }
     onComplete();
   }, durationMs);
 };
@@ -97,4 +111,3 @@ export const INVESTIGATOR_RESULTS_BY_ROLE = {
   Executioner: ['Hunter', 'Executioner', 'Werewolf'],
   Hunter: ['Hunter', 'Executioner', 'Werewolf'],
 };
-

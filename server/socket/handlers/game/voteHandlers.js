@@ -1,5 +1,6 @@
 import { CLIENT_EVENTS } from '../../events.js';
 import { isRapidAction } from '../../../services/index.js';
+import { logInfo } from '../../../logger.js';
 import {
   requireAckAndLobby,
   requireAliveActor,
@@ -35,6 +36,7 @@ export const registerVoteHandlers = ({ socket, user }) => {
       return;
     }
     if (isRapidAction(lobby, user.id, 'castVote')) {
+      logInfo('vote_throttled', { userId: user.id, lobbyName: lobby.name });
       return ack({ ok: true, throttled: true });
     }
 
@@ -44,10 +46,15 @@ export const registerVoteHandlers = ({ socket, user }) => {
     const currentSelection = lobby.currentVotes.get(user.id) ?? null;
     if (currentSelection === targetUserId) {
       lobby.currentVotes.delete(user.id);
+      logInfo('vote_cleared', { userId: user.id, lobbyName: lobby.name });
       return ack({ ok: true, cleared: true });
     }
     lobby.currentVotes.set(user.id, targetUserId);
+    logInfo('vote_cast', {
+      userId: user.id,
+      lobbyName: lobby.name,
+      targetUserId,
+    });
     return ack({ ok: true });
   });
 };
-

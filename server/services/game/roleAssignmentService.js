@@ -139,7 +139,7 @@ const selectVillageSpecialRoles = (slots) => {
   return selected;
 };
 
-const buildRoleDeck = (
+export const buildRoleDeck = (
   memberCount,
   werewolfCount,
   specialRolesEnabled,
