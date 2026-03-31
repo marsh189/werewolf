@@ -15,6 +15,7 @@ import {
 import { getAck, parseLobbyName } from '../utils.js';
 import {
   parseLobbyNameInput,
+  parseDisplayNameInput,
   sanitizeNeutralRolesEnabled,
   sanitizePhaseDurations,
   sanitizeSpecialRolesEnabled,
@@ -22,6 +23,7 @@ import {
 } from '../../validation/validators.js';
 import {
   requireAckAndLobby,
+  requireLobbyMembership,
   requireHost,
   requireSameCurrentLobby,
 } from './shared.js';
@@ -244,6 +246,32 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
       neutralRolesEnabled: lobby.neutralRolesEnabled === true,
       phaseDurations: lobby.phaseDurations ?? null,
     });
+    return ack({ ok: true });
+  });
+
+  socket.on(CLIENT_EVENTS.LOBBY_UPDATE_DISPLAY_NAME, (data, callback) => {
+    const { ack, lobby } = requireAckAndLobby(data, callback);
+    if (!lobby) return;
+    if (!requireLobbyMembership(lobby, user.id, ack)) return;
+
+    if (lobby.started === true || lobby.startingAt || lobby.gamePhase !== 'lobby') {
+      return ack({ ok: false, error: 'Cannot change name after game start' });
+    }
+
+    const displayName = parseDisplayNameInput(data);
+    if (!displayName) return ack({ ok: false, error: 'Invalid display name' });
+
+    const member = lobby.members.get(user.id) ?? null;
+    if (!member) return ack({ ok: false, error: 'User has not joined this lobby' });
+
+    member.name = displayName;
+    emitLobbyUpdate(io, lobby);
+
+    logInfo('lobby_update_display_name', {
+      userId: user.id,
+      lobbyName: lobby.name,
+    });
+
     return ack({ ok: true });
   });
 

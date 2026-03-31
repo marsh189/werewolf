@@ -16,6 +16,7 @@ export const CLIENT_EVENTS = {
   START_GAME: 'startGame',
   END_GAME: 'endGame',
   LOBBY_UPDATE_SETTINGS: 'lobby:updateSettings',
+  LOBBY_UPDATE_DISPLAY_NAME: 'lobby:updateDisplayName',
   PRESENCE_SET_VIEW: 'presence:setView',
 
   /* Chat */
@@ -51,4 +52,3 @@ export const SERVER_EVENTS = {
   /* Chat */
   CHAT_MESSAGE: 'chat:message',
 };
-

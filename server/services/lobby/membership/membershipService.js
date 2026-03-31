@@ -147,3 +147,13 @@ export const removeUserFromLobby = (io, lobbyName, userId) => {
   emitLobbyUpdate(io, lobby);
   return true;
 };
+
+export const updateLobbyMemberDisplayName = (io, lobby, userId, displayName) => {
+  if (!lobby || !userId) return false;
+  const member = lobby.members.get(userId) ?? null;
+  if (!member) return false;
+
+  member.name = displayName;
+  emitLobbyUpdate(io, lobby);
+  return true;
+};

@@ -42,6 +42,16 @@ export const parseTargetUserId = (data) => {
   return targetUserId || null;
 };
 
+export const parseDisplayNameInput = (data) => {
+  const value = data?.displayName ?? data?.name ?? null;
+  if (typeof value !== 'string') return null;
+
+  const normalized = value.trim().replace(/\s+/g, ' ');
+  if (!normalized) return null;
+  if (normalized.length > 40) return null;
+  return normalized;
+};
+
 export const sanitizeWerewolfCount = (input, min = 1) =>
   Math.max(min, Number(input) || min);
 

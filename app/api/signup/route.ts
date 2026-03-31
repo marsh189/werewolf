@@ -6,7 +6,9 @@ import { prisma } from '@/lib/prisma';
 export async function POST(req: Request) {
   const body = await req.json().catch(() => null);
 
-  const name = String(body?.name ?? '').trim();
+  const name = String(body?.name ?? '')
+    .trim()
+    .replace(/\s+/g, ' ');
   const email = String(body?.email ?? '')
     .toLowerCase()
     .trim();

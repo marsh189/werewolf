@@ -176,8 +176,12 @@ export default function Lobby() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-stretch lg:gap-6 lg:min-h-[calc(100svh-12rem)]">
             <div className="w-full lg:w-1/3 flex flex-col gap-4">
               <LobbyMembersList
+                key={`${lobbyNameCanonical ?? lobbyNameParam ?? ''}:${String(lobbyInfo?.startingAt ?? 'none')}`}
                 members={lobbyInfo?.members ?? []}
                 hostUserId={lobbyInfo?.hostUserId ?? ''}
+                currentUserId={session?.user?.id}
+                lobbyName={lobbyNameCanonical ?? lobbyNameParam ?? ''}
+                nameLocked={Boolean(lobbyInfo?.startingAt)}
               />
 
               <div className="hidden lg:block pt-2 space-y-2 mt-auto">

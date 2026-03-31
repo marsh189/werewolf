@@ -108,3 +108,20 @@ export const updateLobbySettings = (
     .timeout(SOCKET_ACK_TIMEOUT_MS)
     .emit('lobby:updateSettings', { lobbyName, ...next }, callback);
 };
+
+/* -------------------------------------------------------------------------
+   Update Lobby Display Name (Self Only)
+
+   Updates the current user's `member.name` within a lobby. This is separate
+   from account-level profile name.
+------------------------------------------------------------------------- */
+export const updateLobbyDisplayName = (
+  lobbyName: string,
+  displayName: string,
+  callback: (err: unknown, res: SocketAck | undefined) => void,
+) => {
+  connectSocketIfNeeded();
+  socket
+    .timeout(SOCKET_ACK_TIMEOUT_MS)
+    .emit('lobby:updateDisplayName', { lobbyName, displayName }, callback);
+};

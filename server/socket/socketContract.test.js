@@ -250,6 +250,25 @@ describe('Socket contract (auth bypassed for tests)', () => {
     expect(lobby.phaseDurations.voteSeconds).toBeGreaterThanOrEqual(10);
   });
 
+  it('lobby:updateDisplayName: allows members to update their lobby display name', async () => {
+    const lobbyName = `test-lobby-${Date.now()}`;
+    const userA = createUser('a');
+    clientA = await connectClient({ port, user: userA });
+
+    const created = await emitAck(clientA, CLIENT_EVENTS.CREATE_LOBBY, { lobbyName });
+    expect(created).toEqual({ ok: true, lobbyName });
+
+    const response = await emitAck(clientA, CLIENT_EVENTS.LOBBY_UPDATE_DISPLAY_NAME, {
+      lobbyName,
+      displayName: 'New Name',
+    });
+    expect(response).toEqual({ ok: true });
+
+    const lobby = getLobby(lobbyName);
+    expect(lobby).toBeTruthy();
+    expect(lobby.members.get(userA.id)?.name).toBe('New Name');
+  });
+
   it('game:getNotebook: only day/night and only dead targets', async () => {
     const lobbyName = `test-lobby-${Date.now()}`;
     const userA = createUser('a');
