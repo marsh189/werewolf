@@ -7,7 +7,7 @@ import { connectSocketIfNeeded } from '@/lib/socket/utils';
 import { lobbyPath } from '@/lib/routes/routePaths';
 import { getRoleDisplayName } from '@/models/roles';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 /* =============================================================================
    Results Page
@@ -19,6 +19,7 @@ export default function LobbyResultsPage() {
   const router = useRouter();
   const { lobbyName } = useParams<{ lobbyName: string }>();
   const { lobbyInfo } = useLobbyRealtime(lobbyName);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   /* -----------------------------------------------------------------------
      Presence Tracking
@@ -54,6 +55,7 @@ export default function LobbyResultsPage() {
   }
 
   const outcome = results.winningFaction ?? 'Village';
+  const timeline = [...(results.timeline ?? [])];
   const { title, subtitle, titleToneClass } = (() => {
     if (outcome === 'Executioner') {
       return {
@@ -88,99 +90,174 @@ export default function LobbyResultsPage() {
 
   return (
     <div className="game-cinematic-scene min-h-[100svh] flex flex-col px-4 sm:px-6 py-10 sm:py-12">
-      <div className="mx-auto w-full max-w-3xl space-y-6 flex-1">
+      <div className="mx-auto w-full max-w-6xl space-y-6 flex-1">
         <header className="text-center space-y-2">
           <p className="game-tight-label">Final</p>
           <h1 className={['game-title', titleToneClass].join(' ')}>{title}</h1>
           <p className="text-slate-300 text-sm">{subtitle}</p>
         </header>
+        <div className="flex flex-col gap-6 lg:grid lg:max-w-6xl lg:grid-cols-[minmax(0,1.15fr)_minmax(18rem,0.72fr)] lg:items-start lg:gap-6">
+          <section className="space-y-3 lg:order-1">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h2 className="game-section-title">Players</h2>
+            </div>
 
-        <div className="space-y-3">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <h2 className="game-section-title">Players</h2>
-          </div>
+            <div className="space-y-2">
+              {results.players.map((player) => {
+                const roleLabel = player.role
+                  ? getRoleDisplayName(player.role)
+                  : player.alive
+                    ? 'Unknown'
+                    : 'Hidden Role';
+                const roleToneClass =
+                  player.faction === 'Village'
+                    ? 'text-emerald-200'
+                    : player.faction === 'Enemy'
+                      ? 'text-red-200'
+                      : player.faction === 'Neutral'
+                        ? 'text-violet-200'
+                        : 'text-slate-100';
 
-          <div className="space-y-2">
-            {results.players.map((player) => {
-              const roleLabel = player.role
-                ? getRoleDisplayName(player.role)
-                : 'Unknown';
-              const roleToneClass =
-                player.faction === 'Village'
-                  ? 'text-emerald-200'
-                  : player.faction === 'Enemy'
-                    ? 'text-red-200'
-                    : player.faction === 'Neutral'
-                      ? 'text-violet-200'
-                      : 'text-slate-100';
-
-              return (
-                <div
-                  key={player.userId}
-                  className="game-box py-2 flex items-center justify-between gap-4"
-                >
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span
-                        className={[
-                          'inline-flex items-center justify-center h-6 w-6 rounded-full border text-[11px] font-bold',
-                          player.alive
-                            ? 'text-emerald-200 border-emerald-500/40 bg-emerald-500/10'
-                            : 'text-red-200 border-red-500/40 bg-red-500/10',
-                        ].join(' ')}
-                        aria-label={player.alive ? 'Alive' : 'Dead'}
-                        title={player.alive ? 'Alive' : 'Dead'}
-                      >
-                        {player.alive ? '\u25CF' : '\u2620'}
-                      </span>
-                      <span className="text-white font-semibold truncate">
-                        {player.name}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400">
-                      <span className={player.alive ? 'text-emerald-300' : 'text-red-300'}>
-                        {player.alive ? 'Alive' : 'Dead'}
-                      </span>
-                      {!player.alive ? (
-                        <span className="text-amber-200">
-                          {` - ${player.eliminationSummary ?? 'Eliminated.'}`}
-                        </span>
-                      ) : null}
-                      {player.faction ? (
+                return (
+                  <div
+                    key={player.userId}
+                    className="game-box py-2 flex items-center justify-between gap-4"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 min-w-0">
                         <span
                           className={[
-                            'font-semibold',
-                            player.faction === 'Village'
-                              ? 'text-emerald-200'
-                              : player.faction === 'Enemy'
-                                ? 'text-red-200'
-                                : player.faction === 'Neutral'
-                                  ? 'text-violet-200'
-                                  : 'text-slate-200',
+                            'inline-flex items-center justify-center h-6 w-6 rounded-full border text-[11px] font-bold',
+                            player.alive
+                              ? 'text-emerald-200 border-emerald-500/40 bg-emerald-500/10'
+                              : 'text-red-200 border-red-500/40 bg-red-500/10',
                           ].join(' ')}
+                          aria-label={player.alive ? 'Alive' : 'Dead'}
+                          title={player.alive ? 'Alive' : 'Dead'}
                         >
-                          {` - ${player.faction}`}
+                          {player.alive ? '\u25CF' : '\u2620'}
                         </span>
-                      ) : null}
-                    </p>
-                  </div>
+                        <span className="text-white font-semibold truncate">
+                          {player.name}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-400">
+                        <span className={player.alive ? 'text-emerald-300' : 'text-red-300'}>
+                          {player.alive ? 'Alive' : 'Dead'}
+                        </span>
+                        {!player.alive ? (
+                          <span className="text-amber-200">
+                            {` - ${player.eliminationSummary ?? 'Eliminated.'}`}
+                          </span>
+                        ) : null}
+                        {player.faction ? (
+                          <span
+                            className={[
+                              'font-semibold',
+                              player.faction === 'Village'
+                                ? 'text-emerald-200'
+                                : player.faction === 'Enemy'
+                                  ? 'text-red-200'
+                                  : player.faction === 'Neutral'
+                                    ? 'text-violet-200'
+                                    : 'text-slate-200',
+                            ].join(' ')}
+                          >
+                            {` - ${player.faction}`}
+                          </span>
+                        ) : null}
+                      </p>
+                    </div>
 
-                  <div className="text-right shrink-0">
-                    <p className={['text-sm font-semibold', roleToneClass].join(' ')}>
-                      {roleLabel}
-                    </p>
+                    <div className="text-right shrink-0">
+                      <p className={['text-sm font-semibold', roleToneClass].join(' ')}>
+                        {roleLabel}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+
+          {timeline.length > 0 ? (
+            <section className="space-y-3 lg:order-2 lg:max-w-[24rem] lg:justify-self-end lg:w-full">
+              <div className="lg:hidden">
+                <button
+                  type="button"
+                  className="w-full py-2 flex items-center justify-between gap-3 border-b border-slate-700/70"
+                  aria-expanded={historyOpen}
+                  onClick={() => setHistoryOpen((prev) => !prev)}
+                >
+                  <span className="game-section-title text-slate-300">
+                    History
+                  </span>
+                  <span className="text-xs font-semibold text-slate-400">
+                    {historyOpen ? 'Hide' : 'Show'}
+                  </span>
+                </button>
+              </div>
+
+              <div className="hidden lg:flex lg:flex-col gap-2">
+                <h2 className="game-section-title">History</h2>
+                <p className="text-xs text-slate-400">
+                  Night kills, vote outcomes, and stalled rounds in order.
+                </p>
+              </div>
+
+              {(historyOpen || timeline.length > 0) ? (
+                <div className={[historyOpen ? 'block' : 'hidden', 'lg:block'].join(' ')}>
+                  <div className="space-y-3 pt-1 lg:pt-0">
+                    {timeline.map((event) => {
+                      const badgeClass =
+                        event.phase === 'night'
+                          ? 'results-history-badge-night'
+                          : 'results-history-badge-day';
+                      const cardClass =
+                        event.phase === 'night'
+                          ? 'results-history-card-night'
+                          : 'results-history-card-day';
+                      const titleToneClass =
+                        event.tone === 'danger'
+                          ? 'text-red-300'
+                          : event.tone === 'success'
+                            ? 'text-emerald-300'
+                            : 'text-sky-300';
+                      return (
+                        <article
+                          key={event.id}
+                          className={['results-history-card', cardClass].join(' ')}
+                        >
+                          <div className="min-w-0 space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <span className={['results-history-badge', badgeClass].join(' ')}>
+                                {event.phase === 'night'
+                                  ? `Night ${event.roundNumber ?? '?'}`
+                                  : `Day ${event.roundNumber ?? '?'}`}
+                              </span>
+                            </div>
+                            <p className={['text-sm font-semibold leading-5', titleToneClass].join(' ')}>
+                              {event.title}
+                            </p>
+                            <p className="text-xs leading-5 text-slate-100/90">
+                              {event.description}
+                            </p>
+                          </div>
+                        </article>
+                      );
+                    })}
                   </div>
                 </div>
-              );
-            })}
-          </div>
+              ) : null}
+            </section>
+          ) : null}
         </div>
       </div>
 
-      <div className="pt-8 mt-auto w-full max-w-3xl mx-auto">
+      <div className="pt-8 mt-auto w-full max-w-6xl mx-auto flex justify-center">
         <button
           type="button"
-          className="game-button-secondary"
+          className="game-button-secondary lg:w-auto lg:min-w-[12rem] lg:px-6"
           onClick={() => {
             if (!lobbyName) return;
 

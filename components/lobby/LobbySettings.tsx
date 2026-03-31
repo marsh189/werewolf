@@ -10,10 +10,12 @@ export default function LobbySettings({
   werewolfCount,
   specialRolesEnabled,
   neutralRolesEnabled,
+  roleRevealOnElimination,
   phaseDurations,
   onWerewolfChange,
   onSpecialRolesEnabledChange,
   onNeutralRolesEnabledChange,
+  onRoleRevealOnEliminationChange,
   onPhaseChange,
 }: LobbySettingsProps) {
   const minWerewolves = specialRolesEnabled ? 2 : 1;
@@ -73,6 +75,35 @@ export default function LobbySettings({
       </div>
 
       <label className="game-label">Roles</label>
+
+      <div className="game-box game-box-role flex items-start justify-between gap-3 py-3 sm:py-2">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-slate-100">
+            Reveal Roles On Elimination
+          </div>
+          <p className="mt-1 text-[11px] sm:text-xs text-slate-300/80 leading-snug">
+            When off, killed and executed players keep their roles hidden.
+          </p>
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={roleRevealOnElimination}
+          aria-label="Toggle role reveal on elimination"
+          disabled={!isHost}
+          onClick={() => onRoleRevealOnEliminationChange(!roleRevealOnElimination)}
+          className={[
+            'shrink-0 inline-flex h-8 w-16 sm:w-20 items-center rounded-full border p-1 transition',
+            roleRevealOnElimination
+              ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-100'
+              : 'border-slate-500/50 bg-slate-700/30 text-slate-200',
+            roleRevealOnElimination ? 'justify-end' : 'justify-start',
+            !isHost ? 'cursor-not-allowed opacity-60' : 'cursor-pointer',
+          ].join(' ')}
+        >
+          <span className="h-6 w-6 shrink-0 rounded-full bg-white/90 transition" />
+        </button>
+      </div>
 
       <div className="game-box game-box-role flex items-start justify-between gap-3 py-3 sm:py-2">
         <div className="min-w-0">

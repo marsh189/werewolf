@@ -1,6 +1,7 @@
 'use client';
 
 import type {
+  EliminationRevealState,
   GamePhase,
   NightResultRevealState,
   RoleRevealState,
@@ -26,6 +27,11 @@ export const GAME_PHASE_ANIMATION_MS = {
   nightResultsFade: 700,
   phaseTransitionFade: 1200,
   nightResultsLineGap: 700,
+  eliminationVotesLead: 500,
+  eliminationVerdictLead: 2600,
+  eliminationDetailsLead: 5200,
+  eliminationPostInfoPause: 3000,
+  eliminationFade: 700,
 } as const;
 
 /* =============================================================================
@@ -56,6 +62,8 @@ export function useGamePhaseAnimation({
   const [revealState, setRevealState] = useState<RoleRevealState>('hidden');
   const [nightResultRevealState, setNightResultRevealState] =
     useState<NightResultRevealState>('hidden');
+  const [eliminationRevealState, setEliminationRevealState] =
+    useState<EliminationRevealState>('hidden');
   const [phaseOverlayState, setPhaseOverlayState] = useState<{
     mode: 'hidden' | 'fadeIn' | 'fadeOut';
     key: number;
@@ -200,6 +208,67 @@ export function useGamePhaseAnimation({
   }, [currentPhase, currentPhaseEndsAt, nightResultsSequenceKey, revealDeathUserId]);
 
   useEffect(() => {
+    if (currentPhase !== 'eliminationResults') {
+      const resetId = setTimeout(() => {
+        setEliminationRevealState('hidden');
+      }, 0);
+      return () => clearTimeout(resetId);
+    }
+
+    const resetToHiddenId = setTimeout(() => {
+      setEliminationRevealState('hidden');
+    }, 0);
+
+    const now = Date.now();
+    const safePhaseEndsAt =
+      currentPhaseEndsAt ??
+      now +
+        GAME_PHASE_ANIMATION_MS.eliminationDetailsLead +
+        GAME_PHASE_ANIMATION_MS.eliminationPostInfoPause;
+    const transitionLeadMs = Math.max(
+      GAME_PHASE_ANIMATION_MS.eliminationFade,
+      GAME_PHASE_ANIMATION_MS.phaseTransitionFade,
+    );
+    const transitionStartAt = safePhaseEndsAt - transitionLeadMs;
+    const desiredDetailsAt = now + GAME_PHASE_ANIMATION_MS.eliminationDetailsLead;
+    const detailsAt = Math.min(
+      desiredDetailsAt,
+      transitionStartAt - GAME_PHASE_ANIMATION_MS.eliminationPostInfoPause,
+    );
+    const verdictAt = Math.min(
+      now + GAME_PHASE_ANIMATION_MS.eliminationVerdictLead,
+      detailsAt - 1200,
+    );
+    const votesAt = Math.min(
+      now + GAME_PHASE_ANIMATION_MS.eliminationVotesLead,
+      verdictAt - 700,
+    );
+
+    const showVotesId = setTimeout(() => {
+      setEliminationRevealState('votes');
+    }, Math.max(0, votesAt - now));
+    const showVerdictId = setTimeout(() => {
+      setEliminationRevealState('verdict');
+    }, Math.max(0, verdictAt - now));
+    const showDetailsId = setTimeout(() => {
+      setEliminationRevealState('details');
+    }, Math.max(0, detailsAt - now));
+    const fadeId = setTimeout(() => {
+      setEliminationRevealState('fading');
+    }, currentPhaseEndsAt
+      ? Math.max(0, currentPhaseEndsAt - Date.now() - GAME_PHASE_ANIMATION_MS.eliminationFade)
+      : GAME_PHASE_ANIMATION_MS.eliminationDetailsLead + 1000);
+
+    return () => {
+      clearTimeout(resetToHiddenId);
+      clearTimeout(showVotesId);
+      clearTimeout(showVerdictId);
+      clearTimeout(showDetailsId);
+      clearTimeout(fadeId);
+    };
+  }, [currentPhase, currentPhaseEndsAt]);
+
+  useEffect(() => {
     /* -------------------------------------------------------------------------
        Fade-in overlay (on phase entry)
     ------------------------------------------------------------------------- */
@@ -261,5 +330,5 @@ export function useGamePhaseAnimation({
     return () => clearTimeout(startId);
   }, [currentDayNumber, currentPhase, currentPhaseEndsAt]);
 
-  return { revealState, nightResultRevealState, phaseOverlayState };
+  return { revealState, nightResultRevealState, eliminationRevealState, phaseOverlayState };
 }

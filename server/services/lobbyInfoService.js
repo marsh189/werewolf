@@ -10,6 +10,11 @@ import { getLobbyEntries } from '../state/state.js';
 ============================================================================= */
 
 export const buildLobbyInfo = (lobby) => {
+  const voteTally = new Map();
+  for (const targetUserId of lobby.currentVotes?.values?.() ?? []) {
+    voteTally.set(targetUserId, (voteTally.get(targetUserId) ?? 0) + 1);
+  }
+
   return {
     lobbyName: lobby.name,
     hostUserId: lobby.hostUserId,
@@ -17,12 +22,14 @@ export const buildLobbyInfo = (lobby) => {
       userId: m.userId,
       name: m.name,
       alive: !lobby.publicEliminatedUserIds?.has(m.userId),
+      voteCount: voteTally.get(m.userId) ?? 0,
     })),
     started: lobby.started,
     startingAt: lobby.startingAt,
     werewolfCount: lobby.werewolfCount ?? 1,
     specialRolesEnabled: lobby.specialRolesEnabled === true,
     neutralRolesEnabled: lobby.neutralRolesEnabled === true,
+    roleRevealOnElimination: lobby.roleRevealOnElimination !== false,
     phaseDurations: lobby.phaseDurations ?? { ...DEFAULT_PHASE_DURATIONS },
     gamePhase: lobby.gamePhase ?? 'lobby',
     dayNumber: lobby.dayNumber ?? null,

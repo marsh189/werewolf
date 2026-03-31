@@ -11,6 +11,15 @@ import { getFactionForRole, isWerewolfRole } from './rolesService.js';
 
 const END_GAME_PHASE_DURATION_MS = 7 * 1000;
 
+const buildGameStats = (players, roleByUserId) => ({
+  totalPlayers: players.length,
+  survivingPlayers: players.filter((player) => player.alive).length,
+  totalDeaths: players.filter((player) => !player.alive).length,
+  villagePlayers: players.filter((player) => getFactionForRole(roleByUserId.get(player.userId) ?? null) === 'Village').length,
+  enemyPlayers: players.filter((player) => getFactionForRole(roleByUserId.get(player.userId) ?? null) === 'Enemy').length,
+  neutralPlayers: players.filter((player) => getFactionForRole(roleByUserId.get(player.userId) ?? null) === 'Neutral').length,
+});
+
 export const getAliveWerewolfIds = (lobby, aliveAtNightStart) =>
   Array.from(lobby.playerRoles.entries())
     .filter(
@@ -23,22 +32,26 @@ export const getAliveWerewolfIds = (lobby, aliveAtNightStart) =>
 
 const buildGameResultsSnapshot = (lobby, winningFaction) => {
   const players = Array.from(lobby.members.values()).map((member) => {
-    const role = lobby.playerRoles?.get(member.userId) ?? null;
+    const actualRole = lobby.playerRoles?.get(member.userId) ?? null;
+    const alive = !lobby.eliminatedUserIds?.has(member.userId);
+    const shouldRevealRole = alive || lobby.roleRevealOnElimination !== false;
     const eliminationSummary =
       lobby.eliminationInfoByUserId?.get(member.userId)?.summary ?? null;
     return {
       userId: member.userId,
       name: member.name,
-      role,
-      faction: getFactionForRole(role),
-      alive: !lobby.eliminatedUserIds?.has(member.userId),
+      role: shouldRevealRole ? actualRole : null,
+      faction: shouldRevealRole ? getFactionForRole(actualRole) : null,
+      alive,
       eliminationSummary,
     };
   });
   return {
     winningFaction: winningFaction ?? 'Village',
     endedAt: Date.now(),
+    stats: buildGameStats(players, lobby.playerRoles ?? new Map()),
     players,
+    timeline: Array.isArray(lobby.roundRecapEvents) ? [...lobby.roundRecapEvents] : [],
   };
 };
 

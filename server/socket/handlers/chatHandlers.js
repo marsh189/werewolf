@@ -72,7 +72,7 @@ export const registerChatHandlers = ({ io, socket, user }) => {
     const message = addChatMessage(lobby, {
       channel,
       userId: user.id,
-      name: user.name ?? 'Player',
+      name: lobby.members.get(user.id)?.name ?? user.name ?? 'Player',
       content,
     });
 

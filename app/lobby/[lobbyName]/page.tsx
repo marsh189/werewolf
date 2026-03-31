@@ -151,6 +151,11 @@ export default function Lobby() {
     applyLobbySettings(buildLobbySettingsPayload(lobbyInfo, { neutralRolesEnabled: enabled }));
   };
 
+  const handleRoleRevealOnEliminationChange = (enabled: boolean) => {
+    if (!lobbyInfo) return;
+    applyLobbySettings(buildLobbySettingsPayload(lobbyInfo, { roleRevealOnElimination: enabled }));
+  };
+
   const handlePhaseChange = (next: LobbyPhaseDurations) => {
     if (!lobbyInfo) return;
     applyLobbySettings(buildLobbySettingsPayload(lobbyInfo, { phaseDurations: next }));
@@ -228,10 +233,12 @@ export default function Lobby() {
                       werewolfCount={settingsDisplay?.werewolfCount ?? 1}
                       specialRolesEnabled={settingsDisplay?.specialRolesEnabled ?? false}
                       neutralRolesEnabled={settingsDisplay?.neutralRolesEnabled ?? false}
+                      roleRevealOnElimination={settingsDisplay?.roleRevealOnElimination ?? true}
                       phaseDurations={settingsDisplay?.phaseDurations ?? DEFAULT_PHASE_DURATIONS}
                       onWerewolfChange={handleWerewolfChange}
                       onSpecialRolesEnabledChange={handleSpecialRolesEnabledChange}
                       onNeutralRolesEnabledChange={handleNeutralRolesEnabledChange}
+                      onRoleRevealOnEliminationChange={handleRoleRevealOnEliminationChange}
                       onPhaseChange={handlePhaseChange}
                     />
                   </div>
@@ -293,10 +300,12 @@ export default function Lobby() {
                     werewolfCount={settingsDisplay?.werewolfCount ?? 1}
                     specialRolesEnabled={settingsDisplay?.specialRolesEnabled ?? false}
                     neutralRolesEnabled={settingsDisplay?.neutralRolesEnabled ?? false}
+                    roleRevealOnElimination={settingsDisplay?.roleRevealOnElimination ?? true}
                     phaseDurations={settingsDisplay?.phaseDurations ?? DEFAULT_PHASE_DURATIONS}
                     onWerewolfChange={handleWerewolfChange}
                     onSpecialRolesEnabledChange={handleSpecialRolesEnabledChange}
                     onNeutralRolesEnabledChange={handleNeutralRolesEnabledChange}
+                    onRoleRevealOnEliminationChange={handleRoleRevealOnEliminationChange}
                     onPhaseChange={handlePhaseChange}
                   />
                 </div>

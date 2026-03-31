@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react';
-import type { GamePhase, NotebookView } from '@/models/game';
+import type { EliminationRevealState, GamePhase, NotebookView } from '@/models/game';
 import type { LobbyMember } from '@/models/lobby';
 import {
   bodyguardGuard,
@@ -35,6 +35,7 @@ type MemberActionRowProps = {
   selectedVoteTargetId: string | null;
   setSelectedVoteTargetId: Dispatch<SetStateAction<string | null>>;
   setViewingNotebook: Dispatch<SetStateAction<NotebookView | null>>;
+  eliminationRevealState?: EliminationRevealState;
 };
 
 type NightAction = {
@@ -110,6 +111,7 @@ export default function MemberActionRow({
   selectedVoteTargetId,
   setSelectedVoteTargetId,
   setViewingNotebook,
+  eliminationRevealState = 'hidden',
 }: MemberActionRowProps) {
   const isNightActionOpen = currentPhase === 'night';
   const nightAction = getNightActionForRole(roleName);
@@ -150,6 +152,10 @@ export default function MemberActionRow({
 
   const isExecutionerTarget =
     roleName === 'Executioner' && executionerTargetUserId === member.userId;
+  const showVoteCount =
+    currentPhase === 'eliminationResults' &&
+    eliminationRevealState !== 'hidden' &&
+    (member.voteCount ?? 0) > 0;
 
   return (
     <button
@@ -215,6 +221,11 @@ export default function MemberActionRow({
         </span>
       </span>
       <span className="flex items-center gap-2">
+        {showVoteCount ? (
+          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-amber-200">
+            {member.voteCount} vote{member.voteCount === 1 ? '' : 's'}
+          </span>
+        ) : null}
         <span
           className={[
             'inline-flex items-center justify-center h-7 w-7 rounded-full border',

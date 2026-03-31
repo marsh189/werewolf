@@ -1,6 +1,13 @@
 import { DEFAULT_PHASE_DURATIONS } from '../../../state/constants.js';
 import { resetGameState } from './resetService.js';
 
+export const getDefaultLobbyDisplayName = (name) => {
+  if (typeof name !== 'string') return 'Player';
+  const normalized = name.trim().replace(/\s+/g, ' ');
+  if (!normalized) return 'Player';
+  return normalized.split(' ')[0] || 'Player';
+};
+
 /* =============================================================================
    Lobby Factory
 
@@ -21,6 +28,7 @@ export const createLobby = (name, hostUser) => {
     werewolfCount: 1,
     specialRolesEnabled: false,
     neutralRolesEnabled: false,
+    roleRevealOnElimination: true,
     phaseDurations: { ...DEFAULT_PHASE_DURATIONS },
     gamePhase: 'lobby',
     revealTimeoutId: null,
@@ -37,7 +45,7 @@ export const createLobby = (name, hostUser) => {
 export const createMember = (user, socketId) => {
   return {
     userId: user.id,
-    name: user.name ?? 'Player',
+    name: getDefaultLobbyDisplayName(user.name),
     socketId,
     joinedAt: Date.now(),
   };

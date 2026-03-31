@@ -18,6 +18,7 @@ import {
   parseDisplayNameInput,
   sanitizeNeutralRolesEnabled,
   sanitizePhaseDurations,
+  sanitizeRoleRevealOnElimination,
   sanitizeSpecialRolesEnabled,
   sanitizeWerewolfCount,
 } from '../../validation/validators.js';
@@ -211,6 +212,7 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
       werewolfCount,
       specialRolesEnabled,
       neutralRolesEnabled,
+      roleRevealOnElimination,
       phaseDurations,
     } = data ?? {};
 
@@ -232,6 +234,9 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     if (typeof neutralRolesEnabled === 'boolean') {
       lobby.neutralRolesEnabled = sanitizeNeutralRolesEnabled(neutralRolesEnabled);
     }
+    if (typeof roleRevealOnElimination === 'boolean') {
+      lobby.roleRevealOnElimination = sanitizeRoleRevealOnElimination(roleRevealOnElimination);
+    }
     const nextDurations = sanitizePhaseDurations(phaseDurations, 10);
     if (nextDurations) {
       lobby.phaseDurations = nextDurations;
@@ -244,6 +249,7 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
       werewolfCount: lobby.werewolfCount,
       specialRolesEnabled: lobby.specialRolesEnabled === true,
       neutralRolesEnabled: lobby.neutralRolesEnabled === true,
+      roleRevealOnElimination: lobby.roleRevealOnElimination === true,
       phaseDurations: lobby.phaseDurations ?? null,
     });
     return ack({ ok: true });

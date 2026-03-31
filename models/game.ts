@@ -103,6 +103,13 @@ export type NightResultRevealState =
   | 'notebook'
   | 'fading';
 
+export type EliminationRevealState =
+  | 'hidden'
+  | 'votes'
+  | 'verdict'
+  | 'details'
+  | 'fading';
+
 export type RoleRevealState =
   | 'hidden'
   | 'titlePre'

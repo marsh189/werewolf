@@ -29,6 +29,16 @@ const NIGHT_ACTION_RESULTS_DURATION_MS = 5000;
 ============================================================================= */
 
 export const createNightPhases = ({ getStartDayPhase }) => {
+  const appendRecapEvent = (lobby, event) => {
+    if (!Array.isArray(lobby.roundRecapEvents)) {
+      lobby.roundRecapEvents = [];
+    }
+    lobby.roundRecapEvents.push({
+      id: `${event.phase}-${event.roundNumber ?? 'x'}-${lobby.roundRecapEvents.length + 1}`,
+      ...event,
+    });
+  };
+
   const startNightActionResultsPhase = (io, lobby) => {
     lobby.gamePhase = 'nightActionResults';
     lobby.currentNightDeathReveal = null;
@@ -151,6 +161,30 @@ export const createNightPhases = ({ getStartDayPhase }) => {
       ? lobby.pendingNightDeathReveals
       : [];
 
+    if (!reveals.length) {
+      appendRecapEvent(lobby, {
+        phase: 'night',
+        roundNumber: lobby.nightNumber ?? null,
+        title: `Night ${lobby.nightNumber ?? '?'} ended quietly`,
+        description: 'No one died before dawn.',
+        tone: 'success',
+        affectedUserIds: [],
+        affectedNames: [],
+      });
+    } else {
+      for (const reveal of reveals) {
+        appendRecapEvent(lobby, {
+          phase: 'night',
+          roundNumber: reveal.nightNumber ?? lobby.nightNumber ?? null,
+          title: `${reveal.name} died during the night`,
+          description: reveal.eliminationSummary ?? 'Killed under cover of darkness.',
+          tone: 'danger',
+          affectedUserIds: [reveal.userId],
+          affectedNames: [reveal.name],
+        });
+      }
+    }
+
     for (const reveal of reveals) {
       const recipientUserIds = Array.from(lobby.members.keys()).filter(
         (userId) => userId !== reveal.userId,
@@ -208,4 +242,3 @@ export const createNightPhases = ({ getStartDayPhase }) => {
     startNightPhase,
   };
 };
-

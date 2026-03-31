@@ -59,6 +59,8 @@ export const sanitizeSpecialRolesEnabled = (input) => input === true;
 
 export const sanitizeNeutralRolesEnabled = (input) => input === true;
 
+export const sanitizeRoleRevealOnElimination = (input) => input === true;
+
 export const sanitizePhaseDurations = (phaseDurations, minSeconds = 10) => {
   if (!phaseDurations || typeof phaseDurations !== 'object') return null;
 

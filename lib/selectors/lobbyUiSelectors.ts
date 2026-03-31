@@ -61,12 +61,14 @@ export const buildLobbySettingsPayload = (
     | 'werewolfCount'
     | 'specialRolesEnabled'
     | 'neutralRolesEnabled'
+    | 'roleRevealOnElimination'
     | 'phaseDurations'
   >,
   overrides: Partial<{
     werewolfCount: number;
     specialRolesEnabled: boolean;
     neutralRolesEnabled: boolean;
+    roleRevealOnElimination: boolean;
     phaseDurations: LobbyPhaseDurations;
   }> = {},
 ): LobbySettingsDisplay => {
@@ -74,6 +76,8 @@ export const buildLobbySettingsPayload = (
     overrides.specialRolesEnabled ?? lobbyInfo.specialRolesEnabled ?? false;
   const nextNeutralRaw =
     overrides.neutralRolesEnabled ?? lobbyInfo.neutralRolesEnabled ?? false;
+  const nextRoleRevealOnElimination =
+    overrides.roleRevealOnElimination ?? lobbyInfo.roleRevealOnElimination ?? true;
 
   // Neutral roles are only available when special roles are enabled.
   const nextNeutral = nextSpecial ? nextNeutralRaw : false;
@@ -87,6 +91,7 @@ export const buildLobbySettingsPayload = (
     werewolfCount: nextWerewolves,
     specialRolesEnabled: nextSpecial,
     neutralRolesEnabled: nextNeutral,
+    roleRevealOnElimination: nextRoleRevealOnElimination,
     phaseDurations: overrides.phaseDurations ?? lobbyInfo.phaseDurations ?? DEFAULT_PHASE_DURATIONS,
   };
 };

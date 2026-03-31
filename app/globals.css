@@ -268,6 +268,96 @@ body {
   animation-delay: 470ms;
 }
 
+.results-history-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 0.95rem;
+  padding: 0.62rem 0.72rem 0.68rem 0.82rem;
+  box-shadow: 0 6px 16px rgba(2, 6, 23, 0.14);
+}
+
+.results-history-card::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 3px;
+  border-radius: 999px;
+}
+
+.results-history-card-day {
+  border: 1px solid rgba(203, 213, 225, 0.42);
+  background:
+    linear-gradient(180deg, rgba(226, 232, 240, 0.18), rgba(148, 163, 184, 0.08)),
+    rgba(15, 23, 42, 0.78);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 8px 18px rgba(15, 23, 42, 0.16);
+}
+
+.results-history-card-night {
+  border: 1px solid rgba(51, 65, 85, 0.9);
+  background:
+    linear-gradient(180deg, rgba(17, 24, 39, 0.97), rgba(3, 7, 18, 0.95)),
+    rgba(2, 6, 23, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.03),
+    0 10px 22px rgba(2, 6, 23, 0.22);
+}
+
+.results-history-card-day::before {
+  background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(148, 163, 184, 0.75));
+}
+
+.results-history-card-night::before {
+  background: linear-gradient(180deg, rgba(71, 85, 105, 0.95), rgba(15, 23, 42, 0.95));
+}
+
+.results-history-card-day .text-slate-50,
+.results-history-card-day .text-slate-300 {
+  color: rgb(226 232 240 / 0.96);
+}
+
+.results-history-card-day .text-slate-500 {
+  color: rgb(148 163 184 / 0.88);
+}
+
+.results-history-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 1.45rem;
+  padding: 0.16rem 0.52rem;
+  border-radius: 999px;
+  border: 1px solid rgba(71, 85, 105, 0.8);
+  font-size: 0.54rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.results-history-badge-day {
+  border-color: rgba(226, 232, 240, 0.7);
+  background:
+    radial-gradient(circle at top, rgba(255, 255, 255, 0.45), transparent 70%),
+    linear-gradient(135deg, rgba(248, 250, 252, 0.96), rgba(226, 232, 240, 0.9));
+  color: rgba(15, 23, 42, 0.96);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.7),
+    0 4px 12px rgba(148, 163, 184, 0.18);
+}
+
+.results-history-badge-night {
+  border-color: rgba(51, 65, 85, 0.85);
+  background:
+    radial-gradient(circle at top, rgba(71, 85, 105, 0.28), transparent 70%),
+    linear-gradient(135deg, rgba(15, 23, 42, 0.98), rgba(31, 41, 55, 0.94));
+  color: rgba(226, 232, 240, 0.94);
+  box-shadow:
+    inset 0 1px 0 rgba(148, 163, 184, 0.08),
+    0 4px 12px rgba(2, 6, 23, 0.22);
+}
+
 @keyframes result-card-enter {
   0% {
     opacity: 0;

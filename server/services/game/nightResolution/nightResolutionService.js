@@ -314,6 +314,7 @@ export const resolveNightAndStartResults = (io, lobby, startNightActionResultsPh
     setEliminationInfo(lobby, userId, {
       kind: 'night',
       summary: eliminationSummaryByUserId.get(userId) ?? 'Killed during the night.',
+      nightNumber: lobby.nightNumber ?? null,
     });
     addNightDeathReveal(lobby, userId);
   }

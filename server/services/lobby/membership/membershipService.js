@@ -8,7 +8,7 @@ import {
 import { removeUserFromLobbyState } from '../../lobbyCleanupService.js';
 import { emitLobbiesList, emitLobbyUpdate } from '../../lobbyEmitService.js';
 import { clearLobbyTimeouts } from '../timing/timeoutService.js';
-import { createMember } from '../state/factoryService.js';
+import { createMember, getDefaultLobbyDisplayName } from '../state/factoryService.js';
 import { logInfo } from '../../../logger.js';
 
 /* =============================================================================
@@ -76,11 +76,26 @@ export const joinLobby = (io, socket, lobby) => {
   const sameSocket = existingMember?.socketId === socket.id;
 
   if (alreadyMember) {
+    const accountDefaultName = getDefaultLobbyDisplayName(user.name);
+    const existingNormalized =
+      typeof existingMember.name === 'string'
+        ? existingMember.name.trim().replace(/\s+/g, ' ')
+        : '';
+    const accountNormalized =
+      typeof user.name === 'string'
+        ? user.name.trim().replace(/\s+/g, ' ')
+        : '';
+    const shouldNormalizeExistingName =
+      !existingNormalized ||
+      (accountNormalized && existingNormalized === accountNormalized);
+
     // Preserve `joinedAt` across reconnects; update socketId/name as needed.
     lobby.members.set(user.id, {
       ...existingMember,
       socketId: socket.id,
-      name: user.name ?? existingMember.name ?? 'Player',
+      name: shouldNormalizeExistingName
+        ? accountDefaultName
+        : existingMember.name ?? accountDefaultName,
     });
   } else {
     lobby.members.set(user.id, createMember(user, socket.id));

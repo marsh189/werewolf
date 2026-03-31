@@ -74,6 +74,7 @@ export const resetGameState = (lobby, { resetPlayers = true } = {}) => {
   lobby.gameResults = null;
   lobby.eliminationInfoByUserId = new Map();
   lobby.inGameUserCounts = new Map();
+  lobby.roundRecapEvents = [];
 
   /* ---------------------------------------------------------------------------
      Round state (phase engine)

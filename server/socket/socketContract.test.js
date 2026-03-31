@@ -229,6 +229,7 @@ describe('Socket contract (auth bypassed for tests)', () => {
       werewolfCount: 2,
       specialRolesEnabled: true,
       neutralRolesEnabled: true,
+      roleRevealOnElimination: false,
       phaseDurations: { daySeconds: 1, nightSeconds: 1, voteSeconds: 1 },
     });
     expect(nonHost).toEqual({ ok: false, error: 'Only host can update settings' });
@@ -238,6 +239,7 @@ describe('Socket contract (auth bypassed for tests)', () => {
       werewolfCount: 2,
       specialRolesEnabled: true,
       neutralRolesEnabled: true,
+      roleRevealOnElimination: false,
       phaseDurations: { daySeconds: 1, nightSeconds: 1, voteSeconds: 1 },
     });
     expect(host).toEqual({ ok: true });
@@ -248,6 +250,7 @@ describe('Socket contract (auth bypassed for tests)', () => {
     expect(lobby.phaseDurations.daySeconds).toBeGreaterThanOrEqual(10);
     expect(lobby.phaseDurations.nightSeconds).toBeGreaterThanOrEqual(10);
     expect(lobby.phaseDurations.voteSeconds).toBeGreaterThanOrEqual(10);
+    expect(lobby.roleRevealOnElimination).toBe(false);
   });
 
   it('lobby:updateDisplayName: allows members to update their lobby display name', async () => {

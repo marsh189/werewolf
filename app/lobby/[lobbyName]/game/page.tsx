@@ -166,7 +166,7 @@ export default function LobbyGamePage() {
      Drives cinematic fades + role/night reveal animations based on the
      authoritative phase timers (`phaseEndsAt`) sent by the server.
   ----------------------------------------------------------------------- */
-  const { revealState, nightResultRevealState, phaseOverlayState } =
+  const { revealState, nightResultRevealState, eliminationRevealState, phaseOverlayState } =
     useGamePhaseAnimation({
       currentPhase,
       currentPhaseEndsAt,
@@ -487,6 +487,7 @@ export default function LobbyGamePage() {
                   selectedVoteTargetId={selectedVoteTargetId}
                   setSelectedVoteTargetId={setSelectedVoteTargetId}
                   setViewingNotebook={setViewingNotebook}
+                  eliminationRevealState={eliminationRevealState}
                 />
               )}
             />
@@ -494,6 +495,7 @@ export default function LobbyGamePage() {
               currentPhase={currentPhase}
               eliminationResultsKey={eliminationResultsKey}
               eliminationResult={eliminationResult}
+              revealState={eliminationRevealState}
             />
             {endGameButton ? <div className="pt-4">{endGameButton}</div> : null}
           </div>

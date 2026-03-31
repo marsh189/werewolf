@@ -1,3 +1,5 @@
+import { getFactionForRole } from './rolesService.js';
+
 /* =============================================================================
    Elimination Helpers (Server)
 
@@ -19,10 +21,18 @@ export const addNightDeathReveal = (lobby, userId) => {
   if (!lobby.members.has(userId) || lobby.eliminatedUserIds.has(userId)) return false;
   lobby.eliminatedUserIds.add(userId);
   const member = lobby.members.get(userId);
+  const role = lobby.playerRoles?.get(userId) ?? null;
+  const eliminationSummary =
+    lobby.eliminationInfoByUserId?.get(userId)?.summary ?? 'Killed during the night.';
+  const shouldRevealRole = lobby.roleRevealOnElimination !== false;
   lobby.pendingNightDeathReveals.push({
     userId,
     name: member?.name ?? 'Unknown Player',
     notebook: lobby.playerNotebooks?.get(userId) ?? '',
+    role: shouldRevealRole ? role : null,
+    faction: shouldRevealRole ? getFactionForRole(role) : null,
+    eliminationSummary,
+    nightNumber: lobby.nightNumber ?? null,
   });
   return true;
 };
@@ -42,4 +52,3 @@ export const convertExecutionersToJesterForNightDeaths = (lobby, nightDeathUserI
     lobby.playerRoleState?.set(userId, roleState);
   }
 };
-
