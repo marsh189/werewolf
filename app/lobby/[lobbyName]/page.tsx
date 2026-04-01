@@ -9,6 +9,7 @@ import LobbySettings from '@/components/lobby/LobbySettings';
 import Navbar from '@/components/shared/Navbar';
 import { useSession } from 'next-auth/react';
 import { useLobbyRealtime } from '@/lib/hooks/useLobbyRealtime';
+import { useGameSoundEffects } from '@/lib/hooks/useGameSoundEffects';
 import { usePresenceView } from '@/lib/hooks/usePresenceView';
 import { useNowTicker } from '@/lib/hooks/useNowTicker';
 import type { LobbyPhaseDurations, LobbySettingsUpdate } from '@/models/lobby';
@@ -92,6 +93,10 @@ export default function Lobby() {
      Lets the server know the user is actively viewing the lobby screen.
   ----------------------------------------------------------------------- */
   usePresenceView(lobbyNameCanonical, 'lobby');
+  useGameSoundEffects({
+    currentPhase: lobbyInfo?.gamePhase ?? 'lobby',
+    startingAt: lobbyInfo?.startingAt,
+  });
 
   /* -----------------------------------------------------------------------
      Derived Display Values

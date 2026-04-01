@@ -17,6 +17,7 @@ import {
   updateNotebook,
 } from '@/lib/actions/gameSocketActions';
 import { useGamePhaseAnimation } from '@/lib/hooks/useGamePhaseAnimation';
+import { useGameSoundEffects } from '@/lib/hooks/useGameSoundEffects';
 import { useLobbyGameState } from '@/lib/hooks/useLobbyGameState';
 import { useLobbyRealtime } from '@/lib/hooks/useLobbyRealtime';
 import { usePresenceView } from '@/lib/hooks/usePresenceView';
@@ -159,6 +160,13 @@ export default function LobbyGamePage() {
           ? (phaseDurations.voteSeconds ?? DEFAULT_PHASE_DURATIONS.voteSeconds) *
             1000
           : null;
+
+  useGameSoundEffects({
+    currentPhase,
+    startingAt: lobbyInfo?.startingAt,
+    phaseEndsAt: currentPhaseEndsAt,
+    canWriteNotebook,
+  });
 
   /* -----------------------------------------------------------------------
      Phase Animations
