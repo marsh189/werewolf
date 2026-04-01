@@ -5,7 +5,7 @@ import { validateRuntimeEnv } from './server/env.js';
 import { registerSocketAuth, registerSocketHandlers } from './server/socket/index.js';
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = process.env.HOSTNAME || '0.0.0.0';
+const hostname = process.env.HOST || '0.0.0.0';
 const port = Number.parseInt(process.env.PORT || '3000', 10);
 
 validateRuntimeEnv();

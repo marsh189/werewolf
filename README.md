@@ -45,7 +45,7 @@ Optional runtime overrides:
 
 ```bash
 PORT=3000
-HOSTNAME=0.0.0.0
+HOST=0.0.0.0
 NODE_ENV=production
 ```
 
@@ -91,7 +91,7 @@ npm run db:deploy
 npm run start
 ```
 
-The server reads `PORT` and `HOSTNAME` from the environment, so most platforms can inject their assigned port automatically.
+The server reads `PORT` from the environment and binds to `HOST` when provided, otherwise `0.0.0.0`. Avoid setting `HOSTNAME` on Render because that variable is reserved for the container's internal hostname.
 
 In production, startup now fails fast if `AUTH_SECRET` or `DATABASE_URL` is missing, or if only half of an OAuth provider configuration is present.
 
