@@ -57,10 +57,8 @@ export function useGameSoundEffects({
   const { soundEnabled } = useSoundSettings();
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioEnabledRef = useRef(false);
-  const lastPhaseRef = useRef<GamePhase | null>(null);
   const lastStartingAtRef = useRef<number | null>(null);
   const lastCountdownSecondRef = useRef<number | null>(null);
-  const lastPhaseCountdownKeyRef = useRef<string | null>(null);
   const previousCanWriteNotebookRef = useRef<boolean | null>(null);
   const nightKillAudioRef = useRef<HTMLAudioElement | null>(null);
   const canUseNightKillAssetRef = useRef<boolean>(true);
@@ -211,13 +209,7 @@ export function useGameSoundEffects({
 
   useEffect(() => {
     if (!phaseEndsAt || !isPhaseWithSound(currentPhase)) {
-      lastPhaseCountdownKeyRef.current = null;
       return;
-    }
-
-    const countdownKey = `${currentPhase}|${phaseEndsAt}`;
-    if (lastPhaseCountdownKeyRef.current !== countdownKey) {
-      lastPhaseCountdownKeyRef.current = countdownKey;
     }
 
     const playedMarks = new Set<number>();
@@ -257,15 +249,6 @@ export function useGameSoundEffects({
       window.clearInterval(intervalId);
     };
   }, [currentPhase, phaseEndsAt, playSpecs]);
-
-  useEffect(() => {
-    const previousPhase = lastPhaseRef.current;
-    lastPhaseRef.current = currentPhase;
-
-    if (!previousPhase) return;
-    if (previousPhase === currentPhase) return;
-    if (!isPhaseWithSound(currentPhase)) return;
-  }, [currentPhase]);
 
   useEffect(() => {
     if (typeof canWriteNotebook !== 'boolean') return;

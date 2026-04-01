@@ -1,16 +1,14 @@
 ﻿'use client';
 
 import EliminationResultsCard from '@/components/game/EliminationResultsCard';
-import EndGameScene from '@/components/game/EndGameScene';
 import GameFloatingPanels from '@/components/game/GameFloatingPanels';
 import GameOverlays from '@/components/game/GameOverlays';
-import GameStartingScene from '@/components/game/GameStartingScene';
+import GamePhaseScene from '@/components/game/GamePhaseScene';
 import MemberActionRow from '@/components/game/MemberActionRow';
-import NightResultsScene from '@/components/game/NightResultsScene';
 import PhaseTimer from '@/components/game/PhaseTimer';
 import PlayerList from '@/components/game/PlayerList';
 import PlayerRoleCard from '@/components/game/PlayerRoleCard';
-import RoleRevealScene from '@/components/game/RoleRevealScene';
+import TrapperAlertButton from '@/components/game/TrapperAlertButton';
 import HeaderMenu from '@/components/shared/HeaderMenu';
 import {
   endGame,
@@ -28,13 +26,14 @@ import {
   buildNightResultsSequenceKey,
   sortMembersAliveFirst,
 } from '@/lib/selectors/gameUiSelectors';
+import { getGamePhaseCopy } from '@/lib/selectors/gamePhaseCopy';
 import {
   DEFAULT_PHASE_DURATIONS,
   getStartingRemainingSeconds,
 } from '@/lib/selectors/lobbyUiSelectors';
 import { normalizeLobbyNameParam } from '@/lib/routes/lobbyName';
 import { getRoleDisplayName, ROLES } from '@/models/roles';
-import type { NightInstructionContext, Role } from '@/models/roles';
+import type { Role } from '@/models/roles';
 import type { SocketAck } from '@/models/game';
 import { useParams, useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -177,10 +176,6 @@ export default function LobbyGamePage() {
       revealDeathUserId,
     });
 
-  const isDayCyclePhase =
-    effectiveDisplayPhase === 'day' ||
-    effectiveDisplayPhase === 'vote' ||
-    effectiveDisplayPhase === 'eliminationResults';
   const isNightCyclePhase = effectiveDisplayPhase === 'night';
   const roleName = role ?? 'Unknown';
   const roleInfo = role && role in ROLES ? ROLES[role as Role] : null;
@@ -203,103 +198,18 @@ export default function LobbyGamePage() {
     canWriteNotebook,
     didWin,
   });
-
-  const phaseSubLabel =
-    effectiveDisplayPhase === 'day'
-      ? 'The village gathers by torchlight.'
-      : effectiveDisplayPhase === 'vote'
-        ? 'Whispers turn to accusations.'
-        : effectiveDisplayPhase === 'eliminationResults'
-          ? 'The village passes judgment.'
-          : effectiveDisplayPhase === 'night'
-            ? 'Shadows deepen and choices are made in secret.'
-            : null;
-
-  const nightInstruction = (() => {
-    if (!selfAlive) return 'You are dead. You cannot act, but you can observe.';
-
-    const nightInstructionContext: NightInstructionContext = {
+  const { phaseTitle, phaseSubLabel, phaseSubInstruction, instructionNode } =
+    getGamePhaseCopy({
+      effectiveDisplayPhase,
+      currentDayNumber,
+      currentNightNumber,
+      selfAlive,
+      roleName,
+      roleInfo,
       hunterShotsRemaining,
       trapperAlertsRemaining,
       trapperAlertActive,
-    };
-
-    if (typeof roleInfo?.nightInstruction === 'function') {
-      return roleInfo.nightInstruction(nightInstructionContext);
-    }
-
-    return roleInfo?.nightInstruction ?? 'You have no night action tonight.';
-  })();
-  const phaseSubInstruction =
-    effectiveDisplayPhase === 'day'
-      ? (currentDayNumber ?? 0) === 0
-        ? 'Steel your nerves. The first night is coming.'
-        : 'Discuss what happened last night and share suspicions.'
-      : effectiveDisplayPhase === 'vote'
-        ? 'Cast your vote for the player you believe is a werewolf.'
-        : effectiveDisplayPhase === 'eliminationResults'
-          ? 'Review the outcome and prepare for the coming night.'
-          : effectiveDisplayPhase === 'night'
-            ? nightInstruction
-            : null;
-  const instructionNode = (() => {
-    if (!phaseSubInstruction) return null;
-
-    // For roles that have limited resources (ex: Hunter shots, Trapper alerts, Doctor self-protect),
-    // highlight the resource portion of the instruction text to match the info popover color.
-    if (effectiveDisplayPhase !== 'night') {
-      return phaseSubInstruction;
-    }
-
-    if (typeof phaseSubInstruction !== 'string') return phaseSubInstruction;
-
-    const highlightFromMarkerToEnd = (marker: string) => {
-      const idx = phaseSubInstruction.indexOf(marker);
-      if (idx === -1) return null;
-      const before = phaseSubInstruction.slice(0, idx).trimEnd();
-      const after = phaseSubInstruction.slice(idx);
-      return (
-        <>
-          <span>{before} </span>
-          <span className="text-sky-300 font-semibold">{after}</span>
-        </>
-      );
-    };
-
-    const highlightExactSentence = (sentence: string) => {
-      const idx = phaseSubInstruction.indexOf(sentence);
-      if (idx === -1) return null;
-      const before = phaseSubInstruction.slice(0, idx).trimEnd();
-      const after = phaseSubInstruction.slice(idx + sentence.length).trimStart();
-      return (
-        <>
-          {before ? <span>{before} </span> : null}
-          <span className="text-sky-300 font-semibold">{sentence}</span>
-          {after ? <span> {after}</span> : null}
-        </>
-      );
-    };
-
-    if (roleName === 'Hunter') {
-      return (
-        highlightFromMarkerToEnd('Shots remaining:') ?? phaseSubInstruction
-      );
-    }
-
-    if (roleName === 'Trapper') {
-      return (
-        highlightFromMarkerToEnd('Alerts remaining:') ?? phaseSubInstruction
-      );
-    }
-
-    if (roleName === 'Doctor') {
-      return (
-        highlightExactSentence('You may protect yourself once per game.') ?? phaseSubInstruction
-      );
-    }
-
-    return phaseSubInstruction;
-  })();
+    });
   const eliminationResultsKey =
     eliminationResult?.noElimination === true
       ? `elim-result-none-${currentDayNumber ?? 0}`
@@ -359,31 +269,31 @@ export default function LobbyGamePage() {
           },
         }
       : null;
+  const headerMenuProps = {
+    leaveAction: leaveGameAction,
+    endGameAction,
+  };
 
   return (
     <>
-      {currentPhase === 'lobby' && lobbyInfo?.startingAt ? (
-        <GameStartingScene startingRemainingSeconds={startingRemainingSeconds} />
-      ) : currentPhase === 'roleReveal' ? (
-        <RoleRevealScene
-          phaseEndsAt={currentPhaseEndsAt}
-          revealState={revealState}
-          roleName={roleName}
-          roleToneClass={roleToneClass}
-        />
-      ) : currentPhase === 'nightResults' ? (
-        <NightResultsScene
-          revealState={nightResultRevealState}
-          revealDeath={revealDeath}
-        />
-      ) : currentPhase === 'endGame' ? (
-        <EndGameScene
-          didWin={didWin}
-          winningFaction={winningFaction}
-        />
-      ) : currentPhase === 'gameResults' ? (
-        <div className="game-cinematic-scene min-h-[100svh]" />
-      ) : (
+      <GamePhaseScene
+        currentPhase={currentPhase}
+        startingAt={lobbyInfo?.startingAt}
+        startingRemainingSeconds={startingRemainingSeconds}
+        phaseEndsAt={currentPhaseEndsAt}
+        revealState={revealState}
+        roleName={roleName}
+        roleToneClass={roleToneClass}
+        nightResultRevealState={nightResultRevealState}
+        revealDeath={revealDeath}
+        didWin={didWin}
+        winningFaction={winningFaction}
+      />
+      {currentPhase !== 'lobby' &&
+      currentPhase !== 'roleReveal' &&
+      currentPhase !== 'nightResults' &&
+      currentPhase !== 'endGame' &&
+      currentPhase !== 'gameResults' ? (
         <div
           className={[
             'min-h-[100svh] px-4 sm:px-6 py-6 sm:py-12 pb-80',
@@ -399,10 +309,7 @@ export default function LobbyGamePage() {
                 </h1>
               </div>
               <div className="sm:hidden shrink-0">
-                <HeaderMenu
-                  leaveAction={leaveGameAction}
-                  endGameAction={endGameAction}
-                />
+                <HeaderMenu {...headerMenuProps} />
               </div>
             </div>
             <div className="flex items-start gap-3 sm:justify-end">
@@ -416,34 +323,25 @@ export default function LobbyGamePage() {
                 executionerTargetUserId={executionerTargetUserId}
               />
               <div className="hidden sm:block shrink-0">
-                <HeaderMenu
-                  leaveAction={leaveGameAction}
-                  endGameAction={endGameAction}
-                />
+                <HeaderMenu {...headerMenuProps} />
               </div>
             </div>
           </header>
 
           <div className="mx-auto w-full max-w-3xl text-center space-y-6">
             <div className="space-y-6">
-              <>
-                <h1 className="game-title">
-                  {isDayCyclePhase
-                    ? `Day ${currentDayNumber ?? 0}`
-                    : isNightCyclePhase
-                      ? `Night ${currentNightNumber ?? 1}`
-                      : 'Game'}
-                </h1>
-                {phaseSubLabel ? (
-                  <p className="text-slate-300/90 text-xs uppercase tracking-[0.2em]">
-                    {phaseSubLabel}
-                  </p>
-                ) : null}
-                {phaseSubInstruction ? (
-                  <p className="text-slate-300 text-sm">{instructionNode}</p>
-                ) : null}
-              </>
-            <div className="flex flex-col items-center gap-3">
+              <h1 className="game-title">
+                {phaseTitle}
+              </h1>
+              {phaseSubLabel ? (
+                <p className="text-slate-300/90 text-xs uppercase tracking-[0.2em]">
+                  {phaseSubLabel}
+                </p>
+              ) : null}
+              {phaseSubInstruction ? (
+                <p className="text-slate-300 text-sm">{instructionNode}</p>
+              ) : null}
+              <div className="flex flex-col items-center gap-3">
                 {currentPhase !== 'nightActionResults' &&
                 currentPhase !== 'eliminationResults' ? (
                   <PhaseTimer
@@ -451,53 +349,16 @@ export default function LobbyGamePage() {
                     phaseDurationMs={phaseDurationMs}
                   />
                 ) : null}
-                {effectiveDisplayPhase === 'night' &&
-                roleName === 'Trapper' &&
-                selfAlive ? (
-                  <button
-                    type="button"
-                    className={[
-                      'game-button-secondary max-w-xs mx-auto',
-                      trapperAlertActive
-                        ? 'game-button-alert-active'
-                        : trapperAlertsRemaining > 0
-                          ? 'game-button-alert-ready'
-                          : '',
-                      'disabled:cursor-not-allowed disabled:opacity-100',
-                    ].join(' ')}
-                    disabled={
-                      currentPhase !== 'night' ||
-                      (!trapperAlertActive && trapperAlertsRemaining <= 0)
-                    }
-                    onClick={() => {
-                      if (!lobbyNameKey || currentPhase !== 'night') return;
-                      toggleTrapperAlert(lobbyNameKey);
-                    }}
-                  >
-                    {trapperAlertActive ? (
-                      <span className="flex flex-col items-center justify-center leading-tight">
-                        <span className="inline-flex items-center justify-center gap-2">
-                          <span className="relative flex h-2.5 w-2.5">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white/70 opacity-75" />
-                            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-white" />
-                          </span>
-                          Alert Active
-                        </span>
-                        <span className="mt-1 text-[11px] font-semibold text-emerald-100/90">
-                          Click to deactivate
-                        </span>
-                      </span>
-                    ) : trapperAlertsRemaining <= 0 ? (
-                      <span className="flex flex-col items-center justify-center leading-tight">
-                        <span>No Alerts Remaining</span>
-                      </span>
-                    ) : (
-                      <span className="flex flex-col items-center justify-center leading-tight">
-                        <span>Activate Alert</span>
-                      </span>
-                    )}
-                  </button>
-                ) : null}
+                <TrapperAlertButton
+                  lobbyName={lobbyNameKey}
+                  currentPhase={currentPhase}
+                  effectiveDisplayPhase={effectiveDisplayPhase}
+                  roleName={roleName}
+                  selfAlive={selfAlive}
+                  trapperAlertActive={trapperAlertActive}
+                  trapperAlertsRemaining={trapperAlertsRemaining}
+                  onToggle={toggleTrapperAlert}
+                />
               </div>
             </div>
 
@@ -534,7 +395,7 @@ export default function LobbyGamePage() {
             />
           </div>
         </div>
-      )}
+      ) : null}
       <GameFloatingPanels
         currentPhase={currentPhase}
         lobbyName={lobbyNameKey}

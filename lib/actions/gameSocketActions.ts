@@ -28,10 +28,11 @@ import type {
    - connects the socket if needed
    - forwards `socket.emit` with its full overload surface
 --------------------------------------------------------------------------- */
+const rawEmit: typeof socket.emit = socket.emit.bind(socket);
+
 const emit = (...args: Parameters<typeof socket.emit>) => {
   connectSocketIfNeeded();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (socket.emit as any)(...args);
+  return rawEmit(...args);
 };
 
 /* ---------------------------------------------------------------------------

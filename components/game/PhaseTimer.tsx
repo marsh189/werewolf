@@ -30,8 +30,7 @@ function PhaseTimerBar({
 
     // Restart the CSS animation at the correct progress point.
     fill.style.animation = 'none';
-    // eslint-disable-next-line @typescript-eslint/no-unused-expressions
-    fill.offsetHeight;
+    void fill.offsetHeight;
     fill.style.animation = '';
     fill.style.animationDuration = `${phaseDurationMs}ms`;
     fill.style.animationDelay = `-${elapsedMs}ms`;
