@@ -30,6 +30,7 @@ Required secrets for production:
 ```bash
 AUTH_SECRET="replace-me"
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/werewolf?schema=public"
+AUTH_URL="https://your-app-name.onrender.com"
 ```
 
 Optional OAuth providers:
@@ -93,7 +94,7 @@ npm run start
 
 The server reads `PORT` from the environment and binds to `HOST` when provided, otherwise `0.0.0.0`. Avoid setting `HOSTNAME` on Render because that variable is reserved for the container's internal hostname.
 
-In production, startup now fails fast if `AUTH_SECRET` or `DATABASE_URL` is missing, or if only half of an OAuth provider configuration is present.
+In production, startup now fails fast if `AUTH_SECRET` or `DATABASE_URL` is missing, or if only half of an OAuth provider configuration is present. For hosted environments such as Render, set `AUTH_URL` to your public site URL.
 
 Recommended targets include Railway, Render, Fly.io, Docker, or any VM/container platform with WebSocket support. A standard Vercel deployment is not the right fit for this custom Socket.IO server.
 

@@ -52,6 +52,8 @@ class NoPasswordError extends CredentialsSignin {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: dbAdapter,
+  trustHost: true,
+  secret: process.env.AUTH_SECRET,
   session: {
     strategy: 'jwt',
   },
