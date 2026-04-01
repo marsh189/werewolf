@@ -1,7 +1,7 @@
 'use client';
 
 import { socket } from '@/lib/socket';
-import { connectSocketIfNeeded } from '@/lib/socket/utils';
+import { connectSocketIfNeeded, waitForSocketConnection } from '@/lib/socket/utils';
 import type {
   CreateAck,
   JoinAck,
@@ -36,8 +36,13 @@ import { SOCKET_ACK_TIMEOUT_MS } from '@/lib/socket/constants';
 export const requestLobbiesList = (
   callback: (err: unknown, res: ListAck<LobbyListItem> | undefined) => void,
 ) => {
-  connectSocketIfNeeded();
-  socket.timeout(SOCKET_ACK_TIMEOUT_MS).emit('lobbiesList', {}, callback);
+  waitForSocketConnection()
+    .then(() => {
+      socket.timeout(SOCKET_ACK_TIMEOUT_MS).emit('lobbiesList', {}, callback);
+    })
+    .catch((err) => {
+      callback(err, undefined);
+    });
 };
 
 /* -------------------------------------------------------------------------
@@ -49,8 +54,13 @@ export const joinLobby = (
   lobbyName: string,
   callback: (err: unknown, res: JoinAck | undefined) => void,
 ) => {
-  connectSocketIfNeeded();
-  socket.timeout(SOCKET_ACK_TIMEOUT_MS).emit('joinLobby', { lobbyName }, callback);
+  waitForSocketConnection()
+    .then(() => {
+      socket.timeout(SOCKET_ACK_TIMEOUT_MS).emit('joinLobby', { lobbyName }, callback);
+    })
+    .catch((err) => {
+      callback(err, undefined);
+    });
 };
 
 /* -------------------------------------------------------------------------
@@ -63,8 +73,13 @@ export const createLobby = (
   lobbyName: string,
   callback: (err: unknown, res: CreateAck | undefined) => void,
 ) => {
-  connectSocketIfNeeded();
-  socket.timeout(SOCKET_ACK_TIMEOUT_MS).emit('createLobby', { lobbyName }, callback);
+  waitForSocketConnection()
+    .then(() => {
+      socket.timeout(SOCKET_ACK_TIMEOUT_MS).emit('createLobby', { lobbyName }, callback);
+    })
+    .catch((err) => {
+      callback(err, undefined);
+    });
 };
 
 /* -------------------------------------------------------------------------
@@ -88,8 +103,13 @@ export const startGame = (
   lobbyName: string,
   callback: (err: unknown, res: SocketAck | undefined) => void,
 ) => {
-  connectSocketIfNeeded();
-  socket.timeout(SOCKET_ACK_TIMEOUT_MS).emit('startGame', { lobbyName }, callback);
+  waitForSocketConnection()
+    .then(() => {
+      socket.timeout(SOCKET_ACK_TIMEOUT_MS).emit('startGame', { lobbyName }, callback);
+    })
+    .catch((err) => {
+      callback(err, undefined);
+    });
 };
 
 /* -------------------------------------------------------------------------
@@ -103,10 +123,15 @@ export const updateLobbySettings = (
   next: LobbySettingsUpdate,
   callback: (err: unknown, res: SocketAck | undefined) => void,
 ) => {
-  connectSocketIfNeeded();
-  socket
-    .timeout(SOCKET_ACK_TIMEOUT_MS)
-    .emit('lobby:updateSettings', { lobbyName, ...next }, callback);
+  waitForSocketConnection()
+    .then(() => {
+      socket
+        .timeout(SOCKET_ACK_TIMEOUT_MS)
+        .emit('lobby:updateSettings', { lobbyName, ...next }, callback);
+    })
+    .catch((err) => {
+      callback(err, undefined);
+    });
 };
 
 /* -------------------------------------------------------------------------
@@ -120,8 +145,13 @@ export const updateLobbyDisplayName = (
   displayName: string,
   callback: (err: unknown, res: SocketAck | undefined) => void,
 ) => {
-  connectSocketIfNeeded();
-  socket
-    .timeout(SOCKET_ACK_TIMEOUT_MS)
-    .emit('lobby:updateDisplayName', { lobbyName, displayName }, callback);
+  waitForSocketConnection()
+    .then(() => {
+      socket
+        .timeout(SOCKET_ACK_TIMEOUT_MS)
+        .emit('lobby:updateDisplayName', { lobbyName, displayName }, callback);
+    })
+    .catch((err) => {
+      callback(err, undefined);
+    });
 };
