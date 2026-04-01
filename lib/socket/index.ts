@@ -21,3 +21,38 @@ export const socket = io(SOCKET_URL, {
   autoConnect: false,
   transports: ['websocket'],
 });
+
+socket.on('connect', () => {
+  console.info('[socket] connected', {
+    id: socket.id,
+    transport: socket.io.engine.transport.name,
+  });
+});
+
+socket.on('connect_error', (error) => {
+  const socketError = error as Error & {
+    description?: unknown;
+    context?: unknown;
+    type?: string;
+  };
+  console.error('[socket] connect_error', {
+    message: socketError.message,
+    description: socketError.description ?? null,
+    context: socketError.context ?? null,
+    type: socketError.type ?? null,
+  });
+});
+
+socket.on('disconnect', (reason, details) => {
+  const disconnectDetails = details as
+    | {
+        description?: unknown;
+        context?: unknown;
+      }
+    | undefined;
+  console.warn('[socket] disconnected', {
+    reason,
+    description: disconnectDetails?.description ?? null,
+    context: disconnectDetails?.context ?? null,
+  });
+});
