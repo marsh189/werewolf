@@ -1,16 +1,17 @@
 import { createServer } from 'node:http';
 import next from 'next';
 import { Server } from 'socket.io';
+import { validateRuntimeEnv } from './server/env.js';
 import { registerSocketAuth, registerSocketHandlers } from './server/socket/index.js';
 
 const dev = process.env.NODE_ENV !== 'production';
-const hostname = 'localhost';
-const port = 3000;
+const hostname = process.env.HOSTNAME || '0.0.0.0';
+const port = Number.parseInt(process.env.PORT || '3000', 10);
+
+validateRuntimeEnv();
 
 const app = next({ dev, hostname, port });
 const handler = app.getRequestHandler();
-
-console.log('SERVER.JS FILE LOADED');
 
 app.prepare().then(() => {
   const httpServer = createServer(handler);

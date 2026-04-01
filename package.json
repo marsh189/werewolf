@@ -8,7 +8,7 @@
     "postinstall": "prisma generate",
     "prebuild": "prisma generate",
     "build": "next build",
-    "start": "NODE_ENV=production node server.js",
+    "start": "node server.js",
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",

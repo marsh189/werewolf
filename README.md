@@ -1,23 +1,52 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+This is a realtime Werewolf game built with Next.js, Socket.IO, NextAuth, and Prisma.
 
 ## Getting Started
 
-First, run the development server:
+Install dependencies and start the local dev server:
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
 ## Tests
 
 ```bash
+npm run lint
+npm run build
 npm test
+npm run e2e
+```
+
+## Environment
+
+Create `.env.local` for local development. The app supports two modes:
+
+- With `DATABASE_URL`, users persist in Postgres through Prisma.
+- Without `DATABASE_URL`, credentials auth falls back to an in-memory user store for dev/test.
+
+Required secrets for production:
+
+```bash
+AUTH_SECRET="replace-me"
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/werewolf?schema=public"
+```
+
+Optional OAuth providers:
+
+```bash
+GITHUB_CLIENT_ID="replace-me"
+GITHUB_CLIENT_SECRET="replace-me"
+GOOGLE_CLIENT_ID="replace-me"
+GOOGLE_CLIENT_SECRET="replace-me"
+```
+
+Optional runtime overrides:
+
+```bash
+PORT=3000
+HOSTNAME=0.0.0.0
+NODE_ENV=production
 ```
 
 ## Database (Postgres)
@@ -49,27 +78,27 @@ npm run e2e:install
 npm run e2e
 ```
 
+## Deployment
+
+This app uses a custom Node server in [server.js](/c:/Users/mamar/Documents/GitHub/werewolf/server.js), so deploy it to a host that supports long-running Node processes and WebSockets.
+
+Typical production steps:
+
+```bash
+npm install
+npm run build
+npm run db:deploy
+npm run start
+```
+
+The server reads `PORT` and `HOSTNAME` from the environment, so most platforms can inject their assigned port automatically.
+
+In production, startup now fails fast if `AUTH_SECRET` or `DATABASE_URL` is missing, or if only half of an OAuth provider configuration is present.
+
+Recommended targets include Railway, Render, Fly.io, Docker, or any VM/container platform with WebSocket support. A standard Vercel deployment is not the right fit for this custom Socket.IO server.
+
 ## CI
 
 - Runs `npm run lint`, `npm run build`, `npm test`, and `npm run e2e` on PRs via GitHub Actions.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the app locally.
