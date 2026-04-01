@@ -35,7 +35,8 @@ export default function LobbySettings({
           <DurationStepper
             label="Day"
             valueSeconds={phaseDurations.daySeconds}
-            minSeconds={10}
+            minSeconds={30}
+            maxSeconds={180}
             isHost={isHost}
             onChange={(nextSeconds) =>
               onPhaseChange({
@@ -48,7 +49,8 @@ export default function LobbySettings({
           <DurationStepper
             label="Night"
             valueSeconds={phaseDurations.nightSeconds}
-            minSeconds={10}
+            minSeconds={30}
+            maxSeconds={180}
             isHost={isHost}
             onChange={(nextSeconds) =>
               onPhaseChange({
@@ -61,7 +63,8 @@ export default function LobbySettings({
           <DurationStepper
             label="Voting"
             valueSeconds={phaseDurations.voteSeconds}
-            minSeconds={10}
+            minSeconds={30}
+            maxSeconds={180}
             isHost={isHost}
             onChange={(nextSeconds) =>
               onPhaseChange({

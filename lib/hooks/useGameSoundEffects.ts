@@ -1,5 +1,6 @@
 'use client';
 
+import { useSoundSettings } from '@/lib/context/soundSettings';
 import type { GamePhase } from '@/models/game';
 import { useCallback, useEffect, useRef } from 'react';
 
@@ -23,6 +24,20 @@ const NIGHT_KILL_SOUND: SoundSpec[] = [
 ];
 const NIGHT_KILL_SOUND_ASSET_URL = '/sounds/killed.mp3';
 
+const VICTORY_FANFARE_SOUND: SoundSpec[] = [
+  { type: 'sawtooth', frequency: 392, durationMs: 180, gain: 0.03 },
+  { type: 'sawtooth', frequency: 523.25, durationMs: 200, gain: 0.032, delayMs: 150 },
+  { type: 'sawtooth', frequency: 659.25, durationMs: 260, gain: 0.034, delayMs: 310 },
+  { type: 'triangle', frequency: 783.99, durationMs: 420, gain: 0.022, delayMs: 500 },
+];
+
+const DEFEAT_STINGER_SOUND: SoundSpec[] = [
+  { type: 'triangle', frequency: 392, durationMs: 180, gain: 0.024 },
+  { type: 'triangle', frequency: 311.13, durationMs: 220, gain: 0.022, delayMs: 150 },
+  { type: 'sawtooth', frequency: 246.94, durationMs: 320, gain: 0.02, delayMs: 320 },
+  { type: 'sine', frequency: 196, durationMs: 520, gain: 0.014, delayMs: 520 },
+];
+
 const isPhaseWithSound = (phase: GamePhase) =>
   phase === 'day' || phase === 'night' || phase === 'vote';
 
@@ -31,12 +46,15 @@ export function useGameSoundEffects({
   startingAt,
   phaseEndsAt,
   canWriteNotebook,
+  didWin,
 }: {
   currentPhase: GamePhase;
   startingAt: number | null | undefined;
   phaseEndsAt?: number | null;
   canWriteNotebook?: boolean;
+  didWin?: boolean | null;
 }) {
+  const { soundEnabled } = useSoundSettings();
   const audioContextRef = useRef<AudioContext | null>(null);
   const audioEnabledRef = useRef(false);
   const lastPhaseRef = useRef<GamePhase | null>(null);
@@ -46,6 +64,7 @@ export function useGameSoundEffects({
   const previousCanWriteNotebookRef = useRef<boolean | null>(null);
   const nightKillAudioRef = useRef<HTMLAudioElement | null>(null);
   const canUseNightKillAssetRef = useRef<boolean>(true);
+  const lastVictoryPhaseKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -93,9 +112,9 @@ export function useGameSoundEffects({
     };
   }, []);
 
-  const playSpecs = (specs: SoundSpec[]) => {
+  const playSpecs = useCallback((specs: SoundSpec[]) => {
     const context = audioContextRef.current;
-    if (!context || !audioEnabledRef.current) return;
+    if (!context || !audioEnabledRef.current || !soundEnabled) return;
 
     const baseTime = context.currentTime;
 
@@ -117,7 +136,7 @@ export function useGameSoundEffects({
       oscillator.start(startAt);
       oscillator.stop(endAt + 0.02);
     }
-  };
+  }, [soundEnabled]);
 
   const playNightKillSound = useCallback(() => {
     if (typeof window === 'undefined') {
@@ -134,6 +153,7 @@ export function useGameSoundEffects({
         }
 
         const audio = nightKillAudioRef.current;
+        if (!soundEnabled) return;
         audio.currentTime = 0;
         void audio.play().catch(() => {
           canUseNightKillAssetRef.current = false;
@@ -146,7 +166,7 @@ export function useGameSoundEffects({
     }
 
     playSpecs(NIGHT_KILL_SOUND);
-  }, []);
+  }, [playSpecs, soundEnabled]);
 
   useEffect(() => {
     if (!startingAt) {
@@ -187,7 +207,7 @@ export function useGameSoundEffects({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [startingAt]);
+  }, [playSpecs, startingAt]);
 
   useEffect(() => {
     if (!phaseEndsAt || !isPhaseWithSound(currentPhase)) {
@@ -236,7 +256,7 @@ export function useGameSoundEffects({
     return () => {
       window.clearInterval(intervalId);
     };
-  }, [currentPhase, phaseEndsAt]);
+  }, [currentPhase, phaseEndsAt, playSpecs]);
 
   useEffect(() => {
     const previousPhase = lastPhaseRef.current;
@@ -263,4 +283,21 @@ export function useGameSoundEffects({
 
     playNightKillSound();
   }, [canWriteNotebook, currentPhase, playNightKillSound]);
+
+  useEffect(() => {
+    if (didWin == null) {
+      lastVictoryPhaseKeyRef.current = null;
+      return;
+    }
+
+    if (currentPhase !== 'endGame' && currentPhase !== 'gameResults') {
+      return;
+    }
+
+    const phaseKey = `${currentPhase}-${didWin ? 'win' : 'loss'}`;
+    if (lastVictoryPhaseKeyRef.current === phaseKey) return;
+    lastVictoryPhaseKeyRef.current = phaseKey;
+
+    playSpecs(didWin ? VICTORY_FANFARE_SOUND : DEFEAT_STINGER_SOUND);
+  }, [currentPhase, didWin, playSpecs]);
 }

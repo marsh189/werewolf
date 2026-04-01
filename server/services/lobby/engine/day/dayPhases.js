@@ -16,7 +16,7 @@ export const createDayPhases = ({ getStartNightPhase, getStartVotePhase }) => {
     const durationMs =
       dayNumber === 0
         ? DAY_ZERO_DURATION_MS
-        : (lobby.phaseDurations?.daySeconds ?? 10) * 1000;
+        : (lobby.phaseDurations?.daySeconds ?? 30) * 1000;
 
     schedulePhaseTransition(
       io,
@@ -36,4 +36,3 @@ export const createDayPhases = ({ getStartNightPhase, getStartVotePhase }) => {
 
   return { startDayPhase };
 };
-

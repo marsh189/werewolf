@@ -20,9 +20,9 @@ import { getRemainingSecondsCeil } from '@/lib/formatters/timeFormatters';
    Fallback values used before a lobby snapshot is available.
 --------------------------------------------------------------------------- */
 export const DEFAULT_PHASE_DURATIONS: LobbyPhaseDurations = {
-  daySeconds: 10,
-  nightSeconds: 10,
-  voteSeconds: 10,
+  daySeconds: 120,
+  nightSeconds: 60,
+  voteSeconds: 30,
 };
 
 /* ---------------------------------------------------------------------------

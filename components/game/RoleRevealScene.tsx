@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { getRoleDisplayName, ROLES } from '@/models/roles';
 import type { Role } from '@/models/roles';
 
@@ -15,7 +14,6 @@ type RoleRevealSceneProps = {
   revealState: RoleRevealState;
   roleName: string;
   roleToneClass: string;
-  endGameButton: ReactNode;
 };
 
 export default function RoleRevealScene({
@@ -23,7 +21,6 @@ export default function RoleRevealScene({
   revealState,
   roleName,
   roleToneClass,
-  endGameButton,
 }: RoleRevealSceneProps) {
   const roleDisplayName = getRoleDisplayName(roleName);
   const roleRevealSummary =
@@ -81,7 +78,6 @@ export default function RoleRevealScene({
         ) : (
           <div className="h-64" />
         )}
-        {endGameButton ? <div className="pt-10">{endGameButton}</div> : null}
       </div>
     </div>
   );

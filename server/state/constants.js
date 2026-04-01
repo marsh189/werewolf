@@ -1,7 +1,7 @@
 export const DEFAULT_PHASE_DURATIONS = {
-  daySeconds: 10,
-  nightSeconds: 10,
-  voteSeconds: 10,
+  daySeconds: 120,
+  nightSeconds: 60,
+  voteSeconds: 30,
 };
 
 export const START_COUNTDOWN_MS = 5000;

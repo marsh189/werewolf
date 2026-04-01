@@ -11,11 +11,13 @@ import PhaseTimer from '@/components/game/PhaseTimer';
 import PlayerList from '@/components/game/PlayerList';
 import PlayerRoleCard from '@/components/game/PlayerRoleCard';
 import RoleRevealScene from '@/components/game/RoleRevealScene';
+import HeaderMenu from '@/components/shared/HeaderMenu';
 import {
   endGame,
   toggleTrapperAlert,
   updateNotebook,
 } from '@/lib/actions/gameSocketActions';
+import { leaveLobby } from '@/lib/actions/lobbySocketActions';
 import { useGamePhaseAnimation } from '@/lib/hooks/useGamePhaseAnimation';
 import { useGameSoundEffects } from '@/lib/hooks/useGameSoundEffects';
 import { useLobbyGameState } from '@/lib/hooks/useLobbyGameState';
@@ -86,7 +88,6 @@ export default function LobbyGamePage() {
     currentNightDeathReveal,
     currentEliminationResult,
     role,
-    gameHostUserId,
     canWriteNotebook,
     werewolfUserIds,
     hunterShotsRemaining,
@@ -131,7 +132,7 @@ export default function LobbyGamePage() {
     currentNightNumber,
   );
   const eliminationResult = lobbyInfo?.currentEliminationResult ?? currentEliminationResult;
-  const hostUserId = lobbyInfo?.hostUserId ?? gameHostUserId;
+  const hostUserId = lobbyInfo?.hostUserId ?? null;
 
   /* -----------------------------------------------------------------------
      Local Player + Member Ordering
@@ -160,13 +161,6 @@ export default function LobbyGamePage() {
           ? (phaseDurations.voteSeconds ?? DEFAULT_PHASE_DURATIONS.voteSeconds) *
             1000
           : null;
-
-  useGameSoundEffects({
-    currentPhase,
-    startingAt: lobbyInfo?.startingAt,
-    phaseEndsAt: currentPhaseEndsAt,
-    canWriteNotebook,
-  });
 
   /* -----------------------------------------------------------------------
      Phase Animations
@@ -201,6 +195,15 @@ export default function LobbyGamePage() {
     if (winningFaction === 'Executioner') return roleName === 'Executioner';
     return null;
   })();
+
+  useGameSoundEffects({
+    currentPhase,
+    startingAt: lobbyInfo?.startingAt,
+    phaseEndsAt: currentPhaseEndsAt,
+    canWriteNotebook,
+    didWin,
+  });
+
   const phaseSubLabel =
     effectiveDisplayPhase === 'day'
       ? 'The village gathers by torchlight.'
@@ -303,7 +306,6 @@ export default function LobbyGamePage() {
       : eliminationResult && 'userId' in eliminationResult
         ? `elim-result-${eliminationResult.userId}`
         : `elim-result-waiting-${currentDayNumber ?? 0}`;
-
   const isHost =
     !!session?.user?.id && !!hostUserId && session.user.id === hostUserId;
 
@@ -325,26 +327,38 @@ export default function LobbyGamePage() {
       : roleName === 'Jester'
         ? 'reveal-role-jester'
         : roleName === 'Executioner'
-          ? 'reveal-role-executioner'
+        ? 'reveal-role-executioner'
       : roleName === 'Villager'
         ? 'reveal-role-villager'
         : 'reveal-role-special';
-  const endGameButton = isHost ? (
-    <button
-      type="button"
-      className="game-button-secondary max-w-xs mx-auto"
-      onClick={() => {
-        if (!lobbyNameKey) return;
-        endGame(lobbyNameKey, (err: unknown, res: SocketAck | undefined) => {
-          if (err || !res?.ok) {
-            console.error(res?.error ?? 'Failed to end game');
-          }
-        });
-      }}
-    >
-      End Game (Temporary)
-    </button>
-  ) : null;
+  const leaveGameAction = lobbyNameKey
+    ? {
+        label: 'Leave Game',
+        title: 'Leave game?',
+        description: 'You will leave this lobby and return to the home screen.',
+        confirmLabel: 'Leave Game',
+        onConfirm: () => {
+          leaveLobby(lobbyNameKey);
+          router.push('/');
+        },
+      }
+    : null;
+  const endGameAction =
+    isHost && lobbyNameKey
+      ? {
+          label: 'End Game',
+          title: 'End this game?',
+          description: 'This will immediately stop the current match for everyone in the lobby.',
+          confirmLabel: 'End Game',
+          onConfirm: () => {
+            endGame(lobbyNameKey, (err: unknown, res: SocketAck | undefined) => {
+              if (err || !res?.ok) {
+                console.error(res?.error ?? 'Failed to end game');
+              }
+            });
+          },
+        }
+      : null;
 
   return (
     <>
@@ -356,19 +370,16 @@ export default function LobbyGamePage() {
           revealState={revealState}
           roleName={roleName}
           roleToneClass={roleToneClass}
-          endGameButton={endGameButton}
         />
       ) : currentPhase === 'nightResults' ? (
         <NightResultsScene
           revealState={nightResultRevealState}
           revealDeath={revealDeath}
-          endGameButton={endGameButton}
         />
       ) : currentPhase === 'endGame' ? (
         <EndGameScene
           didWin={didWin}
           winningFaction={winningFaction}
-          endGameButton={endGameButton}
         />
       ) : currentPhase === 'gameResults' ? (
         <div className="game-cinematic-scene min-h-[100svh]" />
@@ -380,21 +391,37 @@ export default function LobbyGamePage() {
           ].join(' ')}
         >
           <header className="mx-auto w-full max-w-3xl mb-6 flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="text-left">
-              <p className="game-tight-label">Lobby</p>
-              <h1 className="game-title text-left leading-tight">
-                {lobbyNameKey ?? '...'}
-              </h1>
+            <div className="flex items-start justify-between gap-4">
+              <div className="text-left">
+                <p className="game-tight-label">Lobby</p>
+                <h1 className="game-title text-left leading-tight">
+                  {lobbyNameKey ?? '...'}
+                </h1>
+              </div>
+              <div className="sm:hidden shrink-0">
+                <HeaderMenu
+                  leaveAction={leaveGameAction}
+                  endGameAction={endGameAction}
+                />
+              </div>
             </div>
-            <PlayerRoleCard
-              roleName={roleName}
-              roleDisplayName={roleDisplayName}
-              roleInfo={roleInfo}
-              hunterShotsRemaining={hunterShotsRemaining}
-              trapperAlertsRemaining={trapperAlertsRemaining}
-              executionerTargetName={executionerTargetName}
-              executionerTargetUserId={executionerTargetUserId}
-            />
+            <div className="flex items-start gap-3 sm:justify-end">
+              <PlayerRoleCard
+                roleName={roleName}
+                roleDisplayName={roleDisplayName}
+                roleInfo={roleInfo}
+                hunterShotsRemaining={hunterShotsRemaining}
+                trapperAlertsRemaining={trapperAlertsRemaining}
+                executionerTargetName={executionerTargetName}
+                executionerTargetUserId={executionerTargetUserId}
+              />
+              <div className="hidden sm:block shrink-0">
+                <HeaderMenu
+                  leaveAction={leaveGameAction}
+                  endGameAction={endGameAction}
+                />
+              </div>
+            </div>
           </header>
 
           <div className="mx-auto w-full max-w-3xl text-center space-y-6">
@@ -505,7 +532,6 @@ export default function LobbyGamePage() {
               eliminationResult={eliminationResult}
               revealState={eliminationRevealState}
             />
-            {endGameButton ? <div className="pt-4">{endGameButton}</div> : null}
           </div>
         </div>
       )}

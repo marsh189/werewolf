@@ -104,9 +104,6 @@ export default function EliminationResultsCard({
                       {roleLabel}
                     </span>
                   ) : null}
-                  <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 font-semibold text-amber-200">
-                    {eliminationResult.totalVotes} total votes
-                  </span>
                 </div>
                 <div className="result-line-3 w-full rounded-lg border border-slate-700 bg-slate-950/80 p-3 text-sm text-slate-200 whitespace-pre-wrap">
                   {eliminationResult.notebook.trim() || 'No final notes were left behind.'}

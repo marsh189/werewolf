@@ -63,6 +63,14 @@ const getAliveWerewolfCount = (lobby) =>
       isWerewolfRole(role),
   ).length;
 
+const getAliveNonEnemyCount = (lobby) =>
+  Array.from(lobby.playerRoles?.entries() ?? []).filter(
+    ([userId, role]) =>
+      lobby.members?.has(userId) &&
+      !lobby.eliminatedUserIds?.has(userId) &&
+      getFactionForRole(role) !== 'Enemy',
+  ).length;
+
 const startVictoryPhase = (io, lobby, winningFaction) => {
   if (lobby.gameResults) return;
   lobby.gamePhase = 'endGame';
@@ -84,6 +92,21 @@ export const maybeTriggerVillageWin = (io, lobby) => {
   if (lobby.gamePhase === 'endGame' || lobby.gamePhase === 'gameResults') return false;
   if (getAliveWerewolfCount(lobby) !== 0) return false;
   startVictoryPhase(io, lobby, 'Village');
+  return true;
+};
+
+export const maybeTriggerWerewolfWin = (io, lobby) => {
+  if (!lobby?.started) return false;
+  if (lobby.gameResults) return false;
+  if (lobby.gamePhase === 'endGame' || lobby.gamePhase === 'gameResults') return false;
+
+  const aliveWerewolfCount = getAliveWerewolfCount(lobby);
+  const aliveNonEnemyCount = getAliveNonEnemyCount(lobby);
+
+  if (aliveWerewolfCount <= 0) return false;
+  if (aliveWerewolfCount < aliveNonEnemyCount) return false;
+
+  startVictoryPhase(io, lobby, 'Enemy');
   return true;
 };
 

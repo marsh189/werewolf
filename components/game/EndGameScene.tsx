@@ -1,15 +1,11 @@
-import type { ReactNode } from 'react';
-
 type EndGameSceneProps = {
   didWin: boolean | null;
   winningFaction: 'Village' | 'Enemy' | 'Executioner' | 'Jester' | null;
-  endGameButton: ReactNode;
 };
 
 export default function EndGameScene({
   didWin,
   winningFaction,
-  endGameButton,
 }: EndGameSceneProps) {
   const outcome = winningFaction ?? 'Village';
 
@@ -78,9 +74,6 @@ export default function EndGameScene({
           {title}
         </h1>
         <p className="reveal-subtitle">{subtitle}</p>
-        {endGameButton ? (
-          <div className="pt-4 max-w-xs mx-auto">{endGameButton}</div>
-        ) : null}
       </div>
     </div>
   );

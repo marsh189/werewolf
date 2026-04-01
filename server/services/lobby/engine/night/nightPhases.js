@@ -5,7 +5,10 @@ import {
   emitChatMessage,
 } from '../../../chatService.js';
 import { emitLobbyUpdate } from '../../../lobbyEmitService.js';
-import { maybeTriggerVillageWin } from '../../../game/gameResultsService.js';
+import {
+  maybeTriggerVillageWin,
+  maybeTriggerWerewolfWin,
+} from '../../../game/gameResultsService.js';
 import {
   clearNightActionSelections,
   getAliveUserIds,
@@ -148,7 +151,7 @@ export const createNightPhases = ({ getStartDayPhase }) => {
     schedulePhaseTransition(
       io,
       lobby,
-      (lobby.phaseDurations?.nightSeconds ?? 10) * 1000,
+      (lobby.phaseDurations?.nightSeconds ?? 30) * 1000,
       () => {
         resolveNightAndStartResults(io, lobby, startNightActionResultsPhase);
       },
@@ -203,6 +206,7 @@ export const createNightPhases = ({ getStartDayPhase }) => {
       lobby.currentNightDeathReveal = null;
       schedulePhaseTransition(io, lobby, NIGHT_DEATH_REVEAL_DURATION_MS, () => {
         if (maybeTriggerVillageWin(io, lobby)) return;
+        if (maybeTriggerWerewolfWin(io, lobby)) return;
         getStartDayPhase()(io, lobby, (lobby.dayNumber ?? 0) + 1);
       });
       emitLobbyUpdate(io, lobby);
@@ -230,6 +234,7 @@ export const createNightPhases = ({ getStartDayPhase }) => {
         lobby.pendingNightDeathReveals = [];
         lobby.currentNightDeathReveal = null;
         if (maybeTriggerVillageWin(io, lobby)) return;
+        if (maybeTriggerWerewolfWin(io, lobby)) return;
         getStartDayPhase()(io, lobby, (lobby.dayNumber ?? 0) + 1);
       });
       emitLobbyUpdate(io, lobby);

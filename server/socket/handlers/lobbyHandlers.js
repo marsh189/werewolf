@@ -237,7 +237,7 @@ export const registerLobbyHandlers = ({ io, socket, user }) => {
     if (typeof roleRevealOnElimination === 'boolean') {
       lobby.roleRevealOnElimination = sanitizeRoleRevealOnElimination(roleRevealOnElimination);
     }
-    const nextDurations = sanitizePhaseDurations(phaseDurations, 10);
+    const nextDurations = sanitizePhaseDurations(phaseDurations, 30);
     if (nextDurations) {
       lobby.phaseDurations = nextDurations;
     }

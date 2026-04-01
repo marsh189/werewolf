@@ -246,11 +246,35 @@ describe('Socket contract (auth bypassed for tests)', () => {
 
     const lobby = getLobby(lobbyName);
     expect(lobby).toBeTruthy();
-    // Sanitizer clamps to min 10 seconds.
-    expect(lobby.phaseDurations.daySeconds).toBeGreaterThanOrEqual(10);
-    expect(lobby.phaseDurations.nightSeconds).toBeGreaterThanOrEqual(10);
-    expect(lobby.phaseDurations.voteSeconds).toBeGreaterThanOrEqual(10);
+    // Sanitizer clamps to min 30 seconds.
+    expect(lobby.phaseDurations.daySeconds).toBeGreaterThanOrEqual(30);
+    expect(lobby.phaseDurations.nightSeconds).toBeGreaterThanOrEqual(30);
+    expect(lobby.phaseDurations.voteSeconds).toBeGreaterThanOrEqual(30);
     expect(lobby.roleRevealOnElimination).toBe(false);
+  });
+
+  it('lobby:updateSettings: clamps phase durations to the 3 minute max', async () => {
+    const lobbyName = `test-lobby-${Date.now()}`;
+    clientA = await connectClient({ port, user: createUser('a') });
+
+    const created = await emitAck(clientA, CLIENT_EVENTS.CREATE_LOBBY, { lobbyName });
+    expect(created).toEqual({ ok: true, lobbyName });
+
+    const host = await emitAck(clientA, CLIENT_EVENTS.LOBBY_UPDATE_SETTINGS, {
+      lobbyName,
+      werewolfCount: 2,
+      specialRolesEnabled: true,
+      neutralRolesEnabled: true,
+      roleRevealOnElimination: true,
+      phaseDurations: { daySeconds: 999, nightSeconds: 999, voteSeconds: 999 },
+    });
+    expect(host).toEqual({ ok: true });
+
+    const lobby = getLobby(lobbyName);
+    expect(lobby).toBeTruthy();
+    expect(lobby.phaseDurations.daySeconds).toBeLessThanOrEqual(180);
+    expect(lobby.phaseDurations.nightSeconds).toBeLessThanOrEqual(180);
+    expect(lobby.phaseDurations.voteSeconds).toBeLessThanOrEqual(180);
   });
 
   it('lobby:updateDisplayName: allows members to update their lobby display name', async () => {

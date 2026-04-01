@@ -170,11 +170,12 @@ export const buildRoleDeck = (
 
   const werewolfRoles = specialRolesEnabled
     ? (() => {
+        const guaranteedWerewolfRole = 'AlphaWolf';
         const pickedSpecials = pickRandomItems(
-          WEREWOLF_SPECIAL_ROLES.filter((role) => role !== 'AlphaWolf'),
+          WEREWOLF_SPECIAL_ROLES.filter((role) => role !== guaranteedWerewolfRole),
           Math.max(0, safeWerewolfCount - 1),
         );
-        const roles = ['AlphaWolf', ...pickedSpecials];
+        const roles = [guaranteedWerewolfRole, ...pickedSpecials];
         while (roles.length < safeWerewolfCount) {
           roles.push('Werewolf');
         }

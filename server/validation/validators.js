@@ -61,11 +61,15 @@ export const sanitizeNeutralRolesEnabled = (input) => input === true;
 
 export const sanitizeRoleRevealOnElimination = (input) => input === true;
 
-export const sanitizePhaseDurations = (phaseDurations, minSeconds = 10) => {
+export const sanitizePhaseDurations = (
+  phaseDurations,
+  minSeconds = 30,
+  maxSeconds = 180,
+) => {
   if (!phaseDurations || typeof phaseDurations !== 'object') return null;
 
   const sanitizeSeconds = (value) =>
-    Math.max(minSeconds, Number(value) || minSeconds);
+    Math.min(maxSeconds, Math.max(minSeconds, Number(value) || minSeconds));
 
   const daySeconds = sanitizeSeconds(phaseDurations.daySeconds);
   const nightSeconds = sanitizeSeconds(phaseDurations.nightSeconds);

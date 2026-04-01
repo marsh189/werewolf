@@ -4,6 +4,7 @@ import { setEliminationInfo } from '../../../game/eliminationService.js';
 import {
   maybeTriggerNeutralWinByVote,
   maybeTriggerVillageWin,
+  maybeTriggerWerewolfWin,
 } from '../../../game/gameResultsService.js';
 import { schedulePhaseTransition } from '../../../game/gamePhaseUtils.js';
 import { getFactionForRole } from '../../../game/rolesService.js';
@@ -82,6 +83,7 @@ export const createVotePhases = ({ getStartNightPhase }) => {
       lobby.currentEliminationResult = null;
       if (maybeTriggerNeutralWinByVote(io, lobby, votedOutUserId)) return;
       if (maybeTriggerVillageWin(io, lobby)) return;
+      if (maybeTriggerWerewolfWin(io, lobby)) return;
       getStartNightPhase()(io, lobby, (lobby.nightNumber ?? 0) + 1);
     });
     emitLobbyUpdate(io, lobby);
@@ -93,7 +95,7 @@ export const createVotePhases = ({ getStartNightPhase }) => {
     schedulePhaseTransition(
       io,
       lobby,
-      (lobby.phaseDurations?.voteSeconds ?? 10) * 1000,
+      (lobby.phaseDurations?.voteSeconds ?? 30) * 1000,
       () => {
         const { topTargetId, topVotes, tie } = resolveVoteTally(lobby.currentVotes);
         const ballotSummary = buildSortedVoteEntries(lobby, lobby.currentVotes);

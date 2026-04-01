@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import type { NightDeathReveal } from '@/models/lobby';
 import type { NightResultRevealState } from '@/models/game';
 import { getRoleDisplayName } from '@/models/roles';
@@ -6,13 +5,11 @@ import { getRoleDisplayName } from '@/models/roles';
 type NightResultsSceneProps = {
   revealState: NightResultRevealState;
   revealDeath: NightDeathReveal | null;
-  endGameButton: ReactNode;
 };
 
 export default function NightResultsScene({
   revealState,
   revealDeath,
-  endGameButton,
 }: NightResultsSceneProps) {
   const roleLabel = revealDeath?.role ? getRoleDisplayName(revealDeath.role) : 'Unknown';
   const shouldShowRoleReveal = !!(revealDeath?.role || revealDeath?.faction);
@@ -99,7 +96,6 @@ export default function NightResultsScene({
             </div>
           </div>
         ) : null}
-        {endGameButton ? <div className="pt-6 max-w-xs mx-auto">{endGameButton}</div> : null}
       </div>
     </div>
   );

@@ -2,6 +2,7 @@ type DurationStepperProps = {
   label: string;
   valueSeconds: number;
   minSeconds: number;
+  maxSeconds: number;
   isHost: boolean;
   onChange: (nextSeconds: number) => void;
   formatSeconds: (totalSeconds: number) => string;
@@ -11,11 +12,13 @@ export default function DurationStepper({
   label,
   valueSeconds,
   minSeconds,
+  maxSeconds,
   isHost,
   onChange,
   formatSeconds,
 }: DurationStepperProps) {
   const canDecrease = valueSeconds > minSeconds;
+  const canIncrease = valueSeconds < maxSeconds;
 
   return (
     <div className="flex items-center justify-between">
@@ -42,8 +45,14 @@ export default function DurationStepper({
             </button>
             <button
               type="button"
-              className="px-2 py-1 rounded-md border border-slate-600/60 text-slate-200 hover:bg-slate-800/40 transition"
-              onClick={() => onChange(valueSeconds + 30)}
+              className={[
+                'px-2 py-1 rounded-md border transition',
+                canIncrease
+                  ? 'border-slate-600/60 text-slate-200 hover:bg-slate-800/40'
+                  : 'border-slate-600/20 text-slate-200/40 cursor-not-allowed',
+              ].join(' ')}
+              onClick={() => onChange(Math.min(maxSeconds, valueSeconds + 30))}
+              disabled={!canIncrease}
               aria-label={`Increase ${label.toLowerCase()} timer`}
             >
               +
